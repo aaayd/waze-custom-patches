@@ -4,12 +4,16 @@ import io
 import json
 from pathlib import Path
 import zipfile
+import argparse
 from PIL import Image, ImageChops, ImageDraw
 
 root = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser()
+parser.add_argument('--apk', type=Path, default=root/'dist/waze-5.24.5.0-themes-moods-badges-arm64.apk')
+args = parser.parse_args()
 sha = lambda b: hashlib.sha256(b).hexdigest()
 report = json.loads((root/'references/google-maps-icons/pack-manifest.json').read_text())
-with zipfile.ZipFile(root/'downloads/waze-arm64/base.apk') as original, zipfile.ZipFile(root/'dist/waze-5.24.5.0-themes-moods-badges-arm64.apk') as patched:
+with zipfile.ZipFile(root/'downloads/waze-arm64/base.apk') as original, zipfile.ZipFile(args.apk) as patched:
     paths = patched.read('assets/morphe/iconpacks/paths.txt').decode().splitlines()
     rows=report['assets']+report.get('aliases',[])
     assert len(set(paths)) == len(paths) == len(rows)
@@ -44,6 +48,10 @@ with zipfile.ZipFile(root/'downloads/waze-arm64/base.apk') as original, zipfile.
     assert (227,116,0,255) in colors and (255,255,255,255) in colors
     police=Image.open(io.BytesIO(patched.read('assets/morphe/iconpacks/google_maps/bigpin_police@3x.png'))).convert('RGBA')
     assert {(27,110,243,255),(255,255,255,255)} <= set(police.get_flattened_data())
+    for row in report['assets']:
+        if row['icon'] != 'jam': continue
+        traffic=Image.open(io.BytesIO(patched.read('assets/morphe/iconpacks/google_maps/'+row['path']))).convert('RGBA')
+        assert {(220,54,46,255),(255,255,255,255)} <= set(traffic.get_flattened_data()), row['path']
     for path in ['bigpin_closure@3x.png','map_pins_report_closure_albedo@3x.png',
                  'bigpin_blocked_lane@3x.png','map_pins_report_blocked-lane_albedo@3x.png',
                  'bigpin_hazard_stopped@3x.png','map_pins_report_hazard-stopped_albedo@3x.png',

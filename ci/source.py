@@ -82,7 +82,7 @@ def make_manifest(release, files):
         "created_at": created_at,
         "download_url": assets[bundle]["browser_download_url"],
         "page_url": release["html_url"],
-        "description": f"Waze {info['version']} (ARM64). Four independent options: selectable map themes and icon packs with Android Auto setup; detailed report icons at normal sizes; local rank badge selector; unlock driver moods.",
+        "description": (f"Waze {info['version']} (ARM64). Four independent options: selectable map themes and icon packs with Android Auto setup; detailed report icons at normal sizes; local rank badge selector; unlock driver moods. " + info.get("changes", "")).strip(),
     }
 
 
@@ -97,7 +97,7 @@ def next_changelog(current, manifest):
 def main():
     repository = os.environ["GITHUB_REPOSITORY"]
     tag = os.environ["RELEASE_TAG"]
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) or not re.fullmatch(r"waze-[0-9.]+-[0-9]+", tag):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) or not re.fullmatch(r"waze-[0-9.]+-[0-9]+(?:-patches-[0-9]+\.[0-9]+)?", tag):
         raise ValueError("Invalid repository or release tag")
     base = f"repos/{repository}"
     release = api(base + "/releases/tags/" + tag)

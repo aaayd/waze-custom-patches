@@ -30,6 +30,8 @@ and Morphe bundle {info['bundle_version']} with four independent options:
 selectable themes/icon packs and Android Auto setup, detailed report icon sizing,
 local rank badge selector, and driver moods.
 
+{info.get('changes', '')}
+
 All four patches applied; bundle structure, signing, version metadata and
 16 KiB ZIP alignment were checked. Automated builds are not device-runtime tested.
 Inspect build-info.json, patch-report.json and SHA256SUMS.txt for the exact inputs.

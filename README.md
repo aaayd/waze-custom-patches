@@ -1,120 +1,59 @@
 # Waze Custom Patches
 
-Four independently selectable patches for use with Morphe:
+Google Maps and OLED themes, Google Maps report icons, normal-sized detailed
+report markers, a local badge selector and unlocked driver moods.
 
-1. **Selectable map themes**: Original, Google Maps and OLED light/dark themes, icon-pack selection, and Android Auto setup offered after login.
-2. **Detailed report icons at normal sizes**: specific report icons at normal sizes when zooming out (ARM64 renderer).
-3. **Rank badge selector**: local badge appearance.
-4. **Unlock driver moods**: local mood-selection gates.
+## Install with Morphe
 
-## Add to Morphe
+1. Install [Morphe](https://morphe.software/) and [add this patch source](https://morphe.software/add-source?github=aaayd/waze-custom-patches&name=Waze%20Custom%20Patches).
+2. Download the **original ARM64 `.apkm`** from the [latest release](https://github.com/aaayd/waze-custom-patches/releases/latest).
+3. In Morphe, choose Waze and select that file from Downloads. Choose your patches. Keep **Selectable map themes** enabled for themes, Google Maps icons and Android Auto setup.
+4. Patch and install Waze, then open it and sign in.
 
-[Add Waze Custom Patches to Morphe](https://morphe.software/add-source?github=aaayd/waze-custom-patches&name=Waze%20Custom%20Patches)
+Prefer a ready-made app? Install the **patched ARM64 `.apk`** from the same release.
+It uses a different signing key from phone-built copies. For an existing Morphe
+installation, update through Morphe using the same key.
 
-Alternatively, open **Sources > + > Remote** in Morphe and paste:
+### If the source will not download
+
+In **Sources > + > Remote**, paste:
 
 ```text
-https://github.com/aaayd/waze-custom-patches
+https://raw.githubusercontent.com/aaayd/waze-custom-patches/refs/heads/main/patches-bundle.json
 ```
 
-Morphe reads `patches-bundle.json` from the repository, downloads the `.mpp`
-bundle and shows Waze with four independent patch options. Remote sources receive
-bundle updates through Morphe's normal source updater. The metadata always points
-to a complete, successfully patched release.
+Or download the `.mpp` from the latest release and select it through
+**Sources > + > Local**.
 
-This repository is public, so adding the source and downloading updates require
-no GitHub sign-in. You can also download the `.mpp` from Releases and add it
-through **Sources > + > Local**.
+## Themes and icons
 
-Source format and UI: [Morphe's patch-source guide](https://github.com/MorpheApp/morphe-manager/blob/main/docs/patch-sources.md).
+Open **Waze > Settings > Map display**:
 
-## Nightly releases
+- **Themes:** choose Original, Google Maps or OLED separately for light and dark mode.
+- **Icon pack:** Google Maps is the default when no pack has been selected. You can switch to Waze original. Existing choices are kept.
+- Tap **Apply & restart** after changing a theme or icon pack.
 
-GitHub Actions checks APKMirror at **00:00 UTC daily** (01:00 UK summer time).
-If that Waze version and versionCode already has a published release, it stops
-before downloading the app or setting up the Android build toolchain.
-Otherwise it downloads the newest uploaded release's ARM64 package, verifies
-Waze's original signing certificate on every split, and attempts all four patches.
+Traffic, road closures, blocked lanes and stopped-car reports use red icons in
+the Google Maps pack. Enable **Detailed report icons at normal sizes** to keep
+specific report artwork when zooming out.
 
-A successful release contains:
+## Waze missing from Android Auto?
 
-- The **untouched original** `.apkm` split package (or `.apk` if upstream supplies one).
-- A signed **pre-patched ARM64 APK** with all four patches.
-- An updated **`.mpp` Morphe bundle** with four separate options targeting that version.
-- Patch results, build metadata and SHA-256 checksums.
+1. Install and start [Shizuku](https://shizuku.rikka.app/guide/setup/) using wireless debugging. Phone-only setup requires Android 11 or later.
+2. Open Waze and sign in. Accept **Android Auto setup**, or open it from **Settings > Map display > Android Auto setup**.
+3. Install the included **Waze AA Installer** when prompted. Allow Waze to install apps if Android asks.
+4. Open Waze AA Installer, grant it Shizuku access and tap **Repair Android Auto visibility**. Confirm the Waze update in Android's installer.
+5. Open **Android Auto > Customise launcher** and enable Waze, then reconnect to the car.
 
-Original split packages need a split-package installer or Morphe. The patched
-APK can be installed directly; Android Auto setup uses the embedded companion
-installer and Shizuku. Each nightly uses the same signing key. Builds signed by
-Morphe on your phone can use a different key and cannot necessarily be updated by
-the downloadable APK. Do not uninstall to switch keys unless you intend to lose
-local app data.
+This reinstalls your current Waze without uninstalling it or clearing its data.
+For future patches, choose **Waze AA Installer** in Morphe's installer chooser.
+Start Shizuku again after restarting your phone. If the setup row is missing,
+repatch with **Selectable map themes** enabled.
 
-A new version is an **attempted port**, not guaranteed compatibility. The native
-icon-sizing patch checks the exact renderer hash and instruction bytes; bytecode
-and theme patches also validate their targets. If Waze changes these, the job
-fails, retains diagnostics for 14 days and publishes nothing. It retries on the
-next night until fixed. It never silently ships a subset of the four patches.
-CI validates patching, bundle choices, signatures, package metadata and alignment;
-it does not perform a phone/emulator runtime test.
+## Updates
 
-The manual **Run workflow** button retries immediately. `force` rebuilds an
-already released version into workflow artifacts without replacing that release.
-Interrupted uploads remain drafts until a later successful upload finishes.
-After publishing, the workflow updates `patches-bundle.json` and `CHANGELOG.md`
-together. Runs with no new Waze version also check that this source metadata is
-current, without rebuilding the APK or bundle. An interrupted metadata update is
-therefore repaired on the next run.
+The repository checks for new Waze releases every night at **00:00 UTC**.
+Morphe's source updater supplies new patch bundles. If a new Waze version cannot
+be patched successfully, the previous working release stays available.
 
-## Repository setup
-
-The workflow requires these encrypted repository Actions secrets:
-
-| Secret | Value |
-| --- | --- |
-| `WAZE_KEYSTORE_BASE64` | Base64 of the persistent PKCS12 signing keystore |
-| `WAZE_STORE_PASSWORD` | Keystore password |
-| `WAZE_KEY_PASSWORD` | Key password; alias is `Morphe` |
-
-Set repository variable `WAZE_RELEASE_CERT_SHA256` to the release certificate hash.
-Keep a secure backup of this key: changing it prevents seamless APK updates.
-Keys, personal phone captures, browser profiles and downloaded Waze packages are
-excluded from Git. The small companion APK is pinned and included alongside its
-source in `companion/`.
-
-Enable Actions on the default branch. A private repository may consume GitHub
-Actions minutes/storage from your account plan. Scheduled runs can be delayed by
-GitHub; source-site availability can also cause a failed check.
-
-## Local build
-
-Requirements: Python 3.11+, JDK 21, Android SDK platform 36 and build-tools 36.0.0.
-Set `JAVA_HOME` and `ANDROID_HOME`, and export the two password environment variables.
-
-```sh
-python -m pip install -r ci/requirements.txt
-python -m unittest discover -s ci/tests -v
-python ci/upstream.py check
-python ci/upstream.py download
-python ci/build.py --keystore /path/to/waze-release.p12
-```
-
-Outputs go to `dist/nightly/`. The builder downloads a hash-pinned Morphe Desktop
-1.18.0 dependency and uses the checked-in Gradle wrapper. `--input /path/file.apkm`
-allows a local original package, but its actual version and certificate must match
-`build/upstream.json`. Patch target/version metadata is generated at build time;
-source files are not rewritten by the nightly job.
-
-`src/main/resources/themes/native-report-zoom.properties` contains the currently
-supported renderer profile. A changed native library needs a reviewed update to
-this profile and appropriate renderer tests. Never disable its hash/byte guards
-merely to get a green nightly build.
-
-Existing Windows scripts and detailed notes are retained for development:
-[themes](THEME-SELECTOR.md), [icon sizing](REPORT-ICON-SIZING.md),
-[badges](BADGE-SELECTOR.md), [moods](DRIVER-ICONS.md).
-Older scripts may require ignored local analysis fixtures and Android tools;
-`ci/build.py` is the self-contained release path.
-
-This is an independent custom-patch project. Waze, Google Maps and Morphe are
-third-party products; their names are used to describe compatibility.
+[Build and release notes](BUILDING.md)

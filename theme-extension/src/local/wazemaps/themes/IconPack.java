@@ -23,7 +23,7 @@ public final class IconPack {
     private static volatile boolean google;
 
     private static boolean selected(Context context) {
-        return "google_maps".equals(context.getSharedPreferences(PREFS, 0).getString(KEY, "waze"));
+        return "google_maps".equals(context.getSharedPreferences(PREFS, 0).getString(KEY, "google_maps"));
     }
 
     public static String summary(Context context) {

@@ -9,6 +9,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 from urllib.request import urlopen
+from release_config import BUNDLE_SERIES, RELEASE_NOTES
 
 ROOT = Path(__file__).resolve().parents[1]
 DESKTOP_HASH = "36e20d7a18f655fb5829ae50aadd61217e2208536c0741df5f7799300f758f56"
@@ -141,7 +142,7 @@ def main():
         run(jar, "cf", archive, "-C", classes, ".")
         run(d8, "--release", "--min-api", "29", "--lib", android, "--output", dex, archive)
         extensions[dex_name] = dex / "classes.dex"
-    bundle_version = f"1.8.{metadata['version_code']}"
+    bundle_version = f"{BUNDLE_SERIES}.{metadata['version_code']}"
     gradle = [str(ROOT / "gradlew.bat")] if windows else ["bash", str(ROOT / "gradlew")]
     run(*gradle, "themesJar", "--no-daemon", "--console=plain", f"-PwazeVersion={version}", f"-PbundleVersion={bundle_version}")
     patch_jar = ROOT / "build" / "libs" / f"waze-theme-selector-{bundle_version}.jar"
@@ -184,7 +185,7 @@ def main():
             raise ValueError("Embedded Android Auto installer mismatch")
     original = output / f"waze-{version}-original-arm64{source.suffix}"
     shutil.copyfile(source, original)
-    metadata.update(bundle_version=bundle_version, patched=identity,
+    metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
                     validation="Four patches, bundle options, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")

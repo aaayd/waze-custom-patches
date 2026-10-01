@@ -25,7 +25,8 @@ NS = 'http://www.w3.org/2000/svg'
 ET.register_namespace('', NS)
 # Bundled Maps amvy incident styles: warning (default), red (2), blue (4).
 INCIDENT_STYLES = {'police': ('#1B6EF3', '#FFFFFF'), 'road_closure': ('#DC362E', '#FFFFFF'),
-                   'lane_closure': ('#DC362E', '#FFFFFF'), 'stalled_vehicle': ('#DC362E', '#FFFFFF')}
+                   'lane_closure': ('#DC362E', '#FFFFFF'), 'stalled_vehicle': ('#DC362E', '#FFFFFF'),
+                   'jam': ('#DC362E', '#FFFFFF')}
 WARNING_STYLE = ('#FFBB29', '#000000')
 
 

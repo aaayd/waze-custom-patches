@@ -25,7 +25,7 @@ class DiscoveryTests(unittest.TestCase):
           <a href="/arm64-android-apk-download/">5.25.0.0</a></div>''')
         with patch.object(upstream, "page", side_effect=[self.listing, variants]):
             result = upstream.discover(None)
-        self.assertEqual(result["tag"], "waze-5.25.0.0-1030800")
+        self.assertEqual(result["tag"], "waze-5.25.0.0-1030800-patches-1.9")
         self.assertTrue(result["variant_url"].endswith('/arm64-android-apk-download/'))
         self.assertEqual(result["extension"], ".apkm")
 

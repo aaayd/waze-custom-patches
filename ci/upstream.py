@@ -10,6 +10,7 @@ from urllib.error import HTTPError
 
 from bs4 import BeautifulSoup
 from curl_cffi import requests
+from release_config import BUNDLE_SERIES
 
 BASE = "https://www.apkmirror.com"
 LISTING = BASE + "/apk/waze/waze-gps-maps-traffic-alerts-live-navigation/"
@@ -48,7 +49,7 @@ def discover(session):
     if not code:
         raise ValueError("Could not determine upstream versionCode")
     return {"version": version, "version_code": int(code[1]),
-            "tag": f"waze-{version}-{code[1]}", "release_url": release_url,
+            "tag": f"waze-{version}-{code[1]}-patches-{BUNDLE_SERIES}", "release_url": release_url,
             "variant_url": urljoin(BASE, variant["href"]),
             "extension": ".apkm" if "BUNDLE" in text else ".apk"}
 
