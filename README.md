@@ -22,9 +22,9 @@ bundle and shows Waze with four independent patch options. Remote sources receiv
 bundle updates through Morphe's normal source updater. The metadata always points
 to a complete, successfully patched release.
 
-The repository must be public for this link to work: Morphe fetches source metadata
-without GitHub authentication. Until then, download the `.mpp` from Releases while
-signed into GitHub and add it through **Sources > + > Local**.
+This repository is public, so adding the source and downloading updates require
+no GitHub sign-in. You can also download the `.mpp` from Releases and add it
+through **Sources > + > Local**.
 
 Source format and UI: [Morphe's patch-source guide](https://github.com/MorpheApp/morphe-manager/blob/main/docs/patch-sources.md).
 
