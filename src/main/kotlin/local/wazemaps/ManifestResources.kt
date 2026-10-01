@@ -18,6 +18,6 @@ internal val refreshWazeSkins = rawResourcePatch {
         val manifest = get("assets").resolveSibling("AndroidManifest.xml")
         manifest
             // Advance past older bundles so deselected skins are restored on upgrade.
-            .writeBytes(refreshSkinVersion(manifest.readBytes(), 1030749, increment = 17))
+            .writeBytes(refreshSkinVersion(manifest.readBytes(), 1030750, increment = 18))
     }
 }

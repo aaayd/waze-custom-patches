@@ -1,3 +1,3 @@
 """Bump the series when publishing changed patches for an existing Waze version."""
-BUNDLE_SERIES = "1.9"
-RELEASE_NOTES = "Google Maps icons are now the default when no icon pack has been selected. Saved choices are retained. Traffic-report icons now use red backgrounds with white artwork. Themes, icon packs and Android Auto setup are now separate patches, making six independent options in one bundle."
+BUNDLE_SERIES = "1.10"
+RELEASE_NOTES = "Adds a seventh independent patch for Android Auto police/enforcement heads-up distance. Set 50 to 10000 metres in Map display, defaulting to 1200 metres, with native read-back verification and an original-distance restore option. Real car alert timing is pending user testing."

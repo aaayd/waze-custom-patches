@@ -26,13 +26,13 @@ def main():
     notes.write_text(f"""Waze {info['version']} ({info['version_code']}), ARM64.
 
 Assets: untouched original {info['extension']} package, signed pre-patched APK,
-and Morphe bundle {info['bundle_version']} with six independent options:
+and Morphe bundle {info['bundle_version']} with seven independent options:
 selectable themes, selectable report icon packs, detailed report icon sizing,
-local rank badge selector, driver moods, and Android Auto setup.
+local rank badge selector, driver moods, Android Auto setup, and adjustable police alert distance.
 
 {info.get('changes', '')}
 
-All six patches applied; bundle structure, signing, version metadata and
+All seven patches applied; bundle structure, signing, version metadata and
 16 KiB ZIP alignment were checked. Automated builds are not device-runtime tested.
 Inspect build-info.json, patch-report.json and SHA256SUMS.txt for the exact inputs.
 

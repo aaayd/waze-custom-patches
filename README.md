@@ -2,13 +2,13 @@
 
 Google Maps and OLED themes, Google Maps report icons, normal-sized detailed
 report markers, a local badge selector, unlocked driver moods and Android Auto setup.
-Six separate patches in one Morphe source.
+Seven separate patches in one Morphe source.
 
 ## Install with Morphe
 
 1. Install [Morphe](https://morphe.software/) and [add this patch source](https://morphe.software/add-source?github=aaayd/waze-custom-patches&name=Waze%20Custom%20Patches).
 2. Download the **original ARM64 `.apkm`** from the [latest release](https://github.com/aaayd/waze-custom-patches/releases/latest).
-3. In Morphe, choose Waze and select that file from Downloads. Select the features you want from the six independent patches listed below.
+3. In Morphe, choose Waze and select that file from Downloads. Select the features you want from the seven independent patches listed below.
 4. Patch and install Waze, then open it and sign in.
 
 Prefer a ready-made app? Install the **patched ARM64 `.apk`** from the same release.
@@ -34,8 +34,9 @@ Or download the `.mpp` from the latest release and select it through
 - **Rank badge selector:** change your local badge appearance.
 - **Unlock driver moods:** expose the bundled moods.
 - **Android Auto setup:** include the installer and setup prompt for the Android Auto fix.
+- **Android Auto police alert distance:** adjust when police/enforcement heads-up alerts appear.
 
-Enable any combination. The ready-made APK includes all six.
+Enable any combination. The ready-made APK includes all seven.
 
 ## Themes and icons
 
@@ -48,6 +49,20 @@ Open **Waze > Settings > Map display**:
 Traffic, road closures, blocked lanes and stopped-car reports use red icons in
 the Google Maps pack. Enable **Detailed report icons at normal sizes** to keep
 specific report artwork when zooming out.
+
+## Police alert distance
+
+Enable **Android Auto police alert distance**, then open
+**Waze > Settings > Map display > Police alert distance**.
+
+Enter **50 to 10,000 metres** and tap **Apply**. The default is **1,200 metres**.
+The screen shows Waze's live values for normal roads, freeways and fallback.
+**Use original** restores the distances captured before the first override.
+Use it before removing this patch if you want those original values back.
+
+This changes the Android Auto heads-up distance settings. Waze still needs an
+available report, and spoken warnings follow its own rules. Actual in-car alert
+timing needs your test; automated checks verify the patch and config handling.
 
 ## Waze missing from Android Auto?
 
@@ -69,3 +84,5 @@ Morphe's source updater supplies new patch bundles. If a new Waze version cannot
 be patched successfully, the previous working release stays available.
 
 [Build and release notes](BUILDING.md)
+
+Police-distance hook adapted from [dowjames](https://github.com/dowjames/morphe-patches#android-auto-police-alert-distance). [Third-party notices](THIRD_PARTY_NOTICES.md).

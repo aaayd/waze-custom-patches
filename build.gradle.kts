@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 plugins { kotlin("jvm") version "2.4.10" }
 group = "local.wazemaps"
 version = "2.0.0"
-val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.9.0")
+val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.10.0")
 val wazeVersion = providers.gradleProperty("wazeVersion").orElse("5.24.5.0")
 val generatedTarget = layout.buildDirectory.dir("generated/waze-target")
 val generateTarget by tasks.registering {
@@ -31,6 +31,7 @@ java { targetCompatibility = JavaVersion.VERSION_11; sourceCompatibility = JavaV
 tasks.jar {
     exclude("local/wazemaps/CompanionInstallerKt*.class")
     exclude("local/wazemaps/AndroidAutoPatchKt*.class")
+    exclude("local/wazemaps/PoliceAlertDistancePatchKt*.class")
     exclude("local/wazemaps/AndroidAutoResources*.class")
     exclude("local/wazemaps/IconPackPatchKt*.class")
     exclude("local/wazemaps/IconPackResources*.class")
@@ -64,6 +65,7 @@ tasks.register<Jar>("themesJar") {
     include("local/wazemaps/ThemeColoursKt*.class")
     include("local/wazemaps/CompanionInstallerKt*.class")
     include("local/wazemaps/AndroidAutoPatchKt*.class")
+    include("local/wazemaps/PoliceAlertDistancePatchKt*.class")
     include("local/wazemaps/AndroidAutoResources*.class")
     include("local/wazemaps/IconPackPatchKt*.class")
     include("local/wazemaps/IconPackResources*.class")
@@ -76,7 +78,7 @@ tasks.register<Jar>("themesJar") {
     archiveBaseName.set("waze-theme-selector")
     archiveVersion.set(bundleVersion)
     manifest.attributes("Name" to "Waze Theme Selector", "Version" to bundleVersion.get(),
-        "Description" to "Independent themes, icon packs, icon sizing, badges, moods and Android Auto setup",
+        "Description" to "Independent themes, icons, sizing, badges, moods, Android Auto setup and alert distance",
         "Author" to "Local custom patches", "License" to "GPL-3.0", "Patcher-Version" to "1.15.0")
 }
 

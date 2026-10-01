@@ -2,6 +2,7 @@ import com.android.tools.smali.dexlib2.*;
 import com.android.tools.smali.dexlib2.iface.*;
 import com.android.tools.smali.dexlib2.iface.instruction.*;
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference;
 import com.reandroid.arsc.chunk.xml.*;
 import java.io.*;
 import java.security.MessageDigest;
@@ -36,8 +37,8 @@ public class ValidatePatchSelection {
     }
     public static void main(String[] args) throws Exception {
         File apk = new File(args[0]);
-        boolean themes = Boolean.parseBoolean(args[1]), icons = Boolean.parseBoolean(args[2]), auto = Boolean.parseBoolean(args[3]);
-        int originalCode = Integer.parseInt(args[4]);
+        boolean themes = Boolean.parseBoolean(args[1]), icons = Boolean.parseBoolean(args[2]), auto = Boolean.parseBoolean(args[3]), alerts = Boolean.parseBoolean(args[4]);
+        int originalCode = Integer.parseInt(args[5]);
         String prefix = "Llocal/wazemaps/themes/";
         Map<String, ClassDef> classes = new HashMap<>();
         var dex = DexFileFactory.loadDexContainer(apk, Opcodes.getDefault());
@@ -61,14 +62,39 @@ public class ValidatePatchSelection {
         }
         require(attach == (auto ? 1 : 0), "Unexpected startup hook count");
         var render = method(classes, "Lcom/waze/settings/tree/f;", "k", "Lcom/waze/settings/de;");
-        int exits = 0, themeRows = 0, iconRows = 0, autoRows = 0;
+        int exits = 0, themeRows = 0, iconRows = 0, autoRows = 0, alertRows = 0;
         for (var instruction : render.getImplementation().getInstructions()) {
             if (instruction.getOpcode() == Opcode.RETURN_OBJECT) exits++;
             if (calls(instruction, prefix + "ThemeSelector;", "decorate")) themeRows++;
             if (calls(instruction, prefix + "IconPack;", "decorate")) iconRows++;
             if (calls(instruction, prefix + "AndroidAutoSettings;", "decorate")) autoRows++;
+            if (calls(instruction, "Llocal/wazemaps/alerts/AlertDistance;", "decorate")) alertRows++;
         }
-        require(exits > 0 && themeRows == (themes ? exits : 0) && iconRows == (icons ? exits : 0) && autoRows == (auto ? exits : 0), "Settings hook selection mismatch");
+        require(exits > 0 && themeRows == (themes ? exits : 0) && iconRows == (icons ? exits : 0) && autoRows == (auto ? exits : 0) && alertRows == (alerts ? exits : 0), "Settings hook selection mismatch");
+        String alertType = "Llocal/wazemaps/alerts/AlertDistance;";
+        require(classes.containsKey(alertType) == alerts, "Alert extension selection mismatch");
+        int getterHooks = 0, startupHooks = 0, syncHooks = 0;
+        for (var method : classes.get("Lcom/waze/config/c;").getMethods()) if (method.getImplementation() != null) {
+            for (var instruction : method.getImplementation().getInstructions())
+                if (calls(instruction, alertType, "override")) getterHooks++;
+        }
+        for (var method : classes.get("Lcom/waze/NativeManager;").getMethods()) if (method.getName().equals("onlineInit")) {
+            Instruction previous = null;
+            for (var instruction : method.getImplementation().getInstructions()) {
+                if (calls(instruction, alertType, "applySaved")) {
+                    require(previous != null && previous.getOpcode() == Opcode.SPUT_BOOLEAN, "Alert hook must follow native ready flag");
+                    var field = (FieldReference) ((ReferenceInstruction) previous).getReference();
+                    require(field.getName().equals("sAppStarted"), "Alert startup flag mismatch");
+                    startupHooks++;
+                }
+                previous = instruction;
+            }
+        }
+        for (var method : classes.get("Lcom/waze/ConfigManager;").getMethods()) if (method.getName().equals("onConfigSyncedFromServer")) {
+            for (var instruction : method.getImplementation().getInstructions())
+                if (calls(instruction, alertType, "scheduleApply")) syncHooks++;
+        }
+        require(getterHooks == (alerts ? 1 : 0) && startupHooks == (alerts ? 1 : 0) && syncHooks == (alerts ? 1 : 0), "Alert hook selection mismatch");
         try (var zip = new ZipFile(apk)) {
             var asset = zip.getEntry("assets/morphe/installer/waze-aa-installer.apk");
             require((asset != null) == auto, "Installer asset selection mismatch");
@@ -79,7 +105,7 @@ public class ValidatePatchSelection {
             require((zip.getEntry("assets/morphe/iconpacks/paths.txt") != null) == icons, "Icon pack asset selection mismatch");
             require((zip.getEntry("assets/morphe/themes/oled/skin_values.day.lua") != null) == themes, "Theme asset selection mismatch");
             var manifest = AndroidManifestBlock.load(zip.getInputStream(zip.getEntry("AndroidManifest.xml")));
-            require(manifest.getVersionCode() == Math.max(1030749, originalCode + 17), "Manifest version edits did not compose");
+            require(manifest.getVersionCode() == Math.max(1030750, originalCode + 18), "Manifest version edits did not compose");
             require(manifest.getUsesPermissions().contains("android.permission.REQUEST_INSTALL_PACKAGES") == auto, "Install permission selection mismatch");
             for (String[] component : new String[][] {{"activity", "CompanionSetupActivity"}, {"provider", "CompanionApkProvider"}}) {
                 var element = named(manifest.getApplicationElement(), component[0], "local.wazemaps.themes." + component[1]);
@@ -89,6 +115,6 @@ public class ValidatePatchSelection {
             var query = named(manifest.getManifestElement().getElement("queries"), "package", "local.waze.aainstaller");
             require((query != null) == auto, "Companion query selection mismatch");
         }
-        System.out.println("PASS actual APK: themes=" + themes + ", icons=" + icons + ", Android Auto=" + auto + "; isolated classes, assets, permissions, components, startup and settings hooks");
+        System.out.println("PASS actual APK: themes=" + themes + ", icons=" + icons + ", Android Auto=" + auto + ", alerts=" + alerts + "; isolated classes, assets, permissions, components, startup and settings hooks");
     }
 }
