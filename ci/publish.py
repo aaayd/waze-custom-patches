@@ -45,7 +45,7 @@ Source commit: {info['source_commit']}
     found = subprocess.run(["gh", "release", "view", tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if found.returncode:
         subprocess.run(["gh", "release", "create", tag, "--draft", "--target", info["source_commit"],
-                        "--title", f"Waze {info['version']} — Morphe patches", "--notes-file", str(notes)], check=True)
+                        "--title", f"Waze {info['version']} - Morphe patches", "--notes-file", str(notes)], check=True)
     subprocess.run(["gh", "release", "upload", tag, "--clobber", *[str(root / x) for x in required]], check=True)
     subprocess.run(["gh", "release", "edit", tag, "--draft=false", "--notes-file", str(notes)], check=True)
 

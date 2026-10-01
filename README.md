@@ -7,6 +7,27 @@ Four independently selectable patches for use with Morphe:
 3. **Rank badge selector**: local badge appearance.
 4. **Unlock driver moods**: local mood-selection gates.
 
+## Add to Morphe
+
+[Add Waze Custom Patches to Morphe](https://morphe.software/add-source?github=aaayd/waze-custom-patches&name=Waze%20Custom%20Patches)
+
+Alternatively, open **Sources > + > Remote** in Morphe and paste:
+
+```text
+https://github.com/aaayd/waze-custom-patches
+```
+
+Morphe reads `patches-bundle.json` from the repository, downloads the `.mpp`
+bundle and shows Waze with four independent patch options. Remote sources receive
+bundle updates through Morphe's normal source updater. The metadata always points
+to a complete, successfully patched release.
+
+The repository must be public for this link to work: Morphe fetches source metadata
+without GitHub authentication. Until then, download the `.mpp` from Releases while
+signed into GitHub and add it through **Sources > + > Local**.
+
+Source format and UI: [Morphe's patch-source guide](https://github.com/MorpheApp/morphe-manager/blob/main/docs/patch-sources.md).
+
 ## Nightly releases
 
 GitHub Actions checks APKMirror at **00:00 UTC daily** (01:00 UK summer time).
@@ -40,6 +61,10 @@ it does not perform a phone/emulator runtime test.
 The manual **Run workflow** button retries immediately. `force` rebuilds an
 already released version into workflow artifacts without replacing that release.
 Interrupted uploads remain drafts until a later successful upload finishes.
+After publishing, the workflow updates `patches-bundle.json` and `CHANGELOG.md`
+together. Runs with no new Waze version also check that this source metadata is
+current, without rebuilding the APK or bundle. An interrupted metadata update is
+therefore repaired on the next run.
 
 ## Repository setup
 
