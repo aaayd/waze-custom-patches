@@ -9,7 +9,7 @@ Four independently selectable patches for use with Morphe:
 
 ## Nightly releases
 
-GitHub Actions checks APKMirror at **03:17 UTC daily** (04:17 UK summer time).
+GitHub Actions checks APKMirror at **00:00 UTC daily** (01:00 UK summer time).
 If that Waze version and versionCode already has a published release, it stops
 before downloading the app or setting up the Android build toolchain.
 Otherwise it downloads the newest uploaded release's ARM64 package, verifies
