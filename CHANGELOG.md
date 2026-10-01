@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.11.1030732](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.5.0-1030732-patches-1.11) (2026-10-01)
+
+Waze 5.24.5.0 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Adds an eighth independent patch, Speed camera sound below speed limit. Enables the native setting at startup and after configuration refresh, with native read-back verification. Camera alerts and audible sound must remain enabled. Actual driving audio is pending user testing.
+
 ## [1.10.1030732](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.5.0-1030732-patches-1.10) (2026-10-01)
 
 Waze 5.24.5.0 (ARM64). Seven independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance. Adds a seventh independent patch for Android Auto police/enforcement heads-up distance. Set 50 to 10000 metres in Map display, defaulting to 1200 metres, with native read-back verification and an original-distance restore option. Real car alert timing is pending user testing.
