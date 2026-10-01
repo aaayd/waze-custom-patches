@@ -9,6 +9,8 @@ $apk = 'dist\waze-5.24.5.0-themes-moods-badges-arm64.apk'
 if ($LASTEXITCODE) { throw 'Combined patching failed.' }
 & "$AndroidSdk\build-tools\36.0.0\zipalign.exe" -f -P 16 4 $apk build\themes-aligned.apk
 if ($LASTEXITCODE) { throw 'APK alignment failed.' }
+python ci/alignment.py build/themes-aligned.apk
+if ($LASTEXITCODE) { throw 'Native alignment metadata update failed.' }
 & "$Jdk\bin\javac.exe" -cp tools\morphe-desktop.jar tools\SignAligned.java
 if ($LASTEXITCODE) { throw 'Signing helper compilation failed.' }
 & "$Jdk\bin\java.exe" -cp 'tools;tools/morphe-desktop.jar' SignAligned build\themes-aligned.apk $apk

@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 from urllib.request import urlopen
 from release_config import BUNDLE_SERIES, RELEASE_NOTES
+from alignment import normalise_native_alignment
 
 ROOT = Path(__file__).resolve().parents[1]
 DESKTOP_HASH = "36e20d7a18f655fb5829ae50aadd61217e2208536c0741df5f7799300f758f56"
@@ -186,6 +187,8 @@ def main():
         run(java, "-cp", validation_cp, "ValidatePatchSelection", subset, theme, icons, auto, metadata["version_code"])
     aligned = work / "patched-aligned.apk"
     run(align, "-f", "-P", "16", "4", unsigned, aligned)
+    # apksig prioritises existing local ZIP alignment hints over its page-size setting.
+    print(f"Updated {normalise_native_alignment(aligned)} native alignment hints before signing", flush=True)
     patched = output / f"waze-{version}-patched-arm64.apk"
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/SignRelease.java")
     run(java, "-cp", os.pathsep.join([str(work), str(desktop)]), "SignRelease",
