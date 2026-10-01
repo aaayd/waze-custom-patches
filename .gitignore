@@ -128,3 +128,24 @@ node_modules/
 # Ignore IDEA files
 .idea/
 local.properties
+downloads/
+tools/
+dist/
+.kotlin/
+*-log.txt
+*.mpp
+*.keystore
+
+# Private device captures, browser profiles, downloads and credentials.
+references/
+__pycache__/
+*.apkm
+*.xapk
+*.jks
+*.p12
+*.pem
+*.key
+.env
+.env.*
+!companion/waze-aa-installer-1.0.0.apk
+!companion/source/lib/*.jar

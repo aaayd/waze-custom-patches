@@ -1,91 +1,95 @@
-# 👋🧩 Morphe Patches template
+# Waze Custom Patches
 
-Template repository for Morphe Patches.
+Four independently selectable patches for use with Morphe:
 
-## ❓ About
+1. **Selectable map themes**: Original, Google Maps and OLED light/dark themes, icon-pack selection, and Android Auto setup offered after login.
+2. **Detailed report icons at normal sizes**: specific report icons at normal sizes when zooming out (ARM64 renderer).
+3. **Rank badge selector**: local badge appearance.
+4. **Unlock driver moods**: local mood-selection gates.
 
-Patches for apps I like.
+## Nightly releases
 
-<!-- TODO: Update this about section with a brief introduction/summary about this repo and what it offers. -->
+GitHub Actions checks APKMirror at **03:17 UTC daily** (04:17 UK summer time).
+If that Waze version and versionCode already has a published release, it stops
+before downloading the app or setting up the Android build toolchain.
+Otherwise it downloads the newest uploaded release's ARM64 package, verifies
+Waze's original signing certificate on every split, and attempts all four patches.
 
-### How to use these patches
+A successful release contains:
 
-Click here to add these patches to Morphe: https://morphe.software/add-source?github=xyz-user/xyz-patches
+- The **untouched original** `.apkm` split package (or `.apk` if upstream supplies one).
+- A signed **pre-patched ARM64 APK** with all four patches.
+- An updated **`.mpp` Morphe bundle** with four separate options targeting that version.
+- Patch results, build metadata and SHA-256 checksums.
 
-## 🩹 Patches list
+Original split packages need a split-package installer or Morphe. The patched
+APK can be installed directly; Android Auto setup uses the embedded companion
+installer and Shizuku. Each nightly uses the same signing key. Builds signed by
+Morphe on your phone can use a different key and cannot necessarily be updated by
+the downloadable APK. Do not uninstall to switch keys unless you intend to lose
+local app data.
 
-<!-- PATCHES_START EXPANDED -->
+A new version is an **attempted port**, not guaranteed compatibility. The native
+icon-sizing patch checks the exact renderer hash and instruction bytes; bytecode
+and theme patches also validate their targets. If Waze changes these, the job
+fails, retains diagnostics for 14 days and publishes nothing. It retries on the
+next night until fixed. It never silently ships a subset of the four patches.
+CI validates patching, bundle choices, signatures, package metadata and alignment;
+it does not perform a phone/emulator runtime test.
 
-<!-- Do not modify this section by hand. The patch list is generated when release.yml creates a new release.
-     
-     If you wish for the patches list to be collapsed, then remove the word 'EXPANDED' from the comment tag above.
+The manual **Run workflow** button retries immediately. `force` rebuilds an
+already released version into workflow artifacts without replacing that release.
+Interrupted uploads remain drafts until a later successful upload finishes.
 
-     If you wish to manually keep this list updated then remove the PATCHES_START and PATCHES_END 
-     comment blocks entirely. -->
+## Repository setup
 
-#### A list of your patches will automatically be shown here after your first patches release is created.
+The workflow requires these encrypted repository Actions secrets:
 
-&nbsp;
+| Secret | Value |
+| --- | --- |
+| `WAZE_KEYSTORE_BASE64` | Base64 of the persistent PKCS12 signing keystore |
+| `WAZE_STORE_PASSWORD` | Keystore password |
+| `WAZE_KEY_PASSWORD` | Key password; alias is `Morphe` |
 
-## 🚀 Getting development started
+Set repository variable `WAZE_RELEASE_CERT_SHA256` to the release certificate hash.
+Keep a secure backup of this key: changing it prevents seamless APK updates.
+Keys, personal phone captures, browser profiles and downloaded Waze packages are
+excluded from Git. The small companion APK is pinned and included alongside its
+source in `companion/`.
 
-To start using this template, follow these steps:
+Enable Actions on the default branch. A private repository may consume GitHub
+Actions minutes/storage from your account plan. Scheduled runs can be delayed by
+GitHub; source-site availability can also cause a failed check.
 
-1. [Setup](https://github.com/MorpheApp/morphe-documentation/blob/main/docs/morphe-development/README.md) your development environment including adding a GitHub PAT as described [here](https://github.com/MorpheApp/morphe-patcher/blob/main/docs/2_1_setup.md#-prepare-the-environment).
-2. [Create a new repository using this template](https://github.com/new?template_name=morphe-patches-template&template_owner=MorpheApp). Select create a new repository, and **enable 'Include all branches'** 
-3. Enable "Allow GitHub Actions to create and approve pull requests" in your repo Settings > Actions > General > Workflow permissions
-4. Update the [build.gradle.kts](patches/build.gradle.kts) file (Specifically, the 
-   [group of the project](patches/build.gradle.kts#L1), and the [About](patches/build.gradle.kts#L6-L11))
-5. Update the [README.md](README.md) file to be specific of your repo, and update the links in the [issue templates](.github/ISSUE_TEMPLATE).
-6. Choose a name for your patches project. Keep in mind you must use a name that does not 
-   imply authorship by the Morphe open source project. If unsure, then simply name these
-   patches after yourself ("UserXYZ Morphe patches"). See the [NOTICE](NOTICE) for details. 
-7. (Optional): Add `patches-bundle.png` to the project if you want a custom icon to show in
-   Morphe Manager instead of your GitHub profile avatar.
+## Local build
 
-🎉 You are now ready to start creating patches!
+Requirements: Python 3.11+, JDK 21, Android SDK platform 36 and build-tools 36.0.0.
+Set `JAVA_HOME` and `ANDROID_HOME`, and export the two password environment variables.
 
-## 🧑‍💻 Dev usage
+```sh
+python -m pip install -r ci/requirements.txt
+python -m unittest discover -s ci/tests -v
+python ci/upstream.py check
+python ci/upstream.py download
+python ci/build.py --keystore /path/to/waze-release.p12
+```
 
-To develop and release your Patches using this template:
+Outputs go to `dist/nightly/`. The builder downloads a hash-pinned Morphe Desktop
+1.18.0 dependency and uses the checked-in Gradle wrapper. `--input /path/file.apkm`
+allows a local original package, but its actual version and certificate must match
+`build/upstream.json`. Patch target/version metadata is generated at build time;
+source files are not rewritten by the nightly job.
 
-- **Make all changes to the `dev` branch.**
-- For local development work build your patches using the gradle task `./gradlew buildAndroid` to generate the mpp file found in `patches/build/libs/patches-*.mpp`. Apply your patches locally using Morphe Desktop tool like any other patch bundle.
-- Always use [Semantic commit](https://kapeli.com/cheat_sheets/Semantic_Commits.docset/Contents/Resources/Documents/index) messages for commits. To keep it simple use only 3 commit message types: 
-  - `feat: Added a new feature`
-  - `fix: Some problem now fixed`
-  - `chore: Random change you do not want in the user facing changelog`
-- Commits of `fix:` and `feat:` will automatically generate new pre-releases and `chore:` will not create a new release.
-- Users can apply your dev branch releases by enabling `pre-release` in Morphe Manager patch sources.
-- When your dev branch is ready, and you want a stable release, merge dev branch to main (do not squash, and only merge).
-- **Always use semantic release (release.yml)**. Do not manually upload or create releases by hand
-  because many files must be updated and release.yml handles everything.
+`src/main/resources/themes/native-report-zoom.properties` contains the currently
+supported renderer profile. A changed native library needs a reviewed update to
+this profile and appropriate renderer tests. Never disable its hash/byte guards
+merely to get a green nightly build.
 
-## 🤓 Tips
-- See the [patcher documentation](https://github.com/MorpheApp/morphe-patcher/blob/main/docs/1_patcher_intro.md) for more examples of creating patches and fingerprints.
-- Do not use AI to create new release scripts. The `release.yml` here already handles everything.
-  If you need omething custom with your releases then modify the existing `release.yml`
-  and `.releaserc` instead of writing everything new from scratch.
-- Do not manually edit or manually commit any generated files such as: `patches-list.json`,
-  `patches-bundle.json`, `CHANGELOG.md`.  These files will be automatically updated by `release.yml`.
-- Do not force push any semantic release commits as that will break all future releases.
-  If you need to fix a broken release, it's always easiest to create a new release instead of 
-  fixing an existing release.
+Existing Windows scripts and detailed notes are retained for development:
+[themes](THEME-SELECTOR.md), [icon sizing](REPORT-ICON-SIZING.md),
+[badges](BADGE-SELECTOR.md), [moods](DRIVER-ICONS.md).
+Older scripts may require ignored local analysis fixtures and Android tools;
+`ci/build.py` is the self-contained release path.
 
-
-<!-- The patches end tag is intentionally placed here so the first release will clean up 
-     this readme of all developer instructions above. -->
-<!-- PATCHES_END -->
-
-### 🛠️ Building locally
-
-- Run `./gradlew buildAndroid`
-- The built patches .mpp file is found in `patches/build/libs/patches-*.mpp`
-- Patch the mpp file using [Morphe-Desktop](https://github.com/MorpheApp/morphe-desktop)
-  like any other patch bundle.
-
-See the [Morphe documentation](https://github.com/MorpheApp/morphe-documentation) for more information.
-
-## 📜 License
-
-UserXYZ Patches are licensed under the [GNU General Public License v3.0](LICENSE)
+This is an independent custom-patch project. Waze, Google Maps and Morphe are
+third-party products; their names are used to describe compatibility.
