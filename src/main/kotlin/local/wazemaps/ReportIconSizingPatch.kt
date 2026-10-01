@@ -9,7 +9,7 @@ private object ReportIconSizingResources
 @Suppress("unused")
 val reportIconSizingPatch = rawResourcePatch(
     name = "Detailed report icons at normal sizes",
-    description = "Keep specific hazard icons when zooming out, using Waze's original small and tiny sizes. ARM64 only. Use alone or together with Selectable map themes from this bundle.",
+    description = "Keep specific hazard icons when zooming out, using Waze's original small and tiny sizes. ARM64 only. Use alone or together with Selectable report icon packs from this bundle.",
     default = true
 ) {
     compatibleWith(Compatibility(

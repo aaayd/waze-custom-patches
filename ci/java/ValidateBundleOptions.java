@@ -1,9 +1,11 @@
 import app.morphe.patcher.patch.*;
+import com.android.tools.smali.dexlib2.Opcodes;
+import com.android.tools.smali.dexlib2.dexbacked.DexBackedDexFile;
 import java.io.*;
 import java.util.*;
 import java.util.zip.ZipFile;
 
-/** Check real loader metadata and dependency closure for all 16 toggle combinations. */
+/** Check real loader metadata and dependency closure for all 64 toggle combinations. */
 public class ValidateBundleOptions {
     private static void visit(Patch<?> patch, Set<Patch<?>> closure) {
         if (closure.add(patch)) for (Patch<?> dependency : patch.getDependencies()) visit(dependency, closure);
@@ -13,15 +15,15 @@ public class ValidateBundleOptions {
         PatchLoader loader = args.length > 1
             ? new PatchLoader.Dex(Set.of(bundle), new File(args[1]))
             : new PatchLoader.Jar(Set.of(bundle));
-        Set<String> expected = Set.of("Selectable map themes", "Detailed report icons at normal sizes", "Rank badge selector", "Unlock driver moods");
+        Set<String> expected = Set.of("Selectable map themes", "Detailed report icons at normal sizes", "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs");
         List<Patch<?>> options = new ArrayList<>();
         Set<String> names = new HashSet<>();
         for (Patch<?> patch : loader) if (patch.getName() != null) { options.add(patch); names.add(patch.getName()); }
-        if (options.size() != 4 || !names.equals(expected)) throw new AssertionError("Unexpected options: " + names);
-        for (int mask = 0; mask < 16; mask++) {
+        if (options.size() != expected.size() || !names.equals(expected)) throw new AssertionError("Unexpected options: " + names);
+        for (int mask = 0; mask < (1 << options.size()); mask++) {
             Set<Patch<?>> closure = new HashSet<>();
             Set<String> selected = new HashSet<>();
-            for (int i = 0; i < 4; i++) if ((mask & (1 << i)) != 0) {
+            for (int i = 0; i < options.size(); i++) if ((mask & (1 << i)) != 0) {
                 selected.add(options.get(i).getName()); visit(options.get(i), closure);
             }
             Set<String> actual = new HashSet<>();
@@ -29,8 +31,19 @@ public class ValidateBundleOptions {
             if (!selected.equals(actual)) throw new AssertionError("Unexpected automatic selection: " + selected + " -> " + actual);
         }
         try (ZipFile zip = new ZipFile(bundle)) {
-            for (String path : List.of("extensions/theme-selector.dex", "extensions/badge-selector.dex", "classes.dex")) {
+            for (String path : List.of("extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex", "classes.dex")) {
                 if (zip.getEntry(path) == null || zip.getEntry(path).getSize() == 0) throw new AssertionError("Missing DEX: " + path);
+            }
+            for (String path : List.of("theme-selector.dex", "badge-selector.dex", "aa-installer.dex", "icon-pack.dex")) {
+                var dex = DexBackedDexFile.fromInputStream(Opcodes.getDefault(), new BufferedInputStream(zip.getInputStream(zip.getEntry("extensions/" + path))));
+                Set<String> local = new HashSet<>();
+                for (var type : dex.getClasses()) local.add(type.getType());
+                for (var reference : dex.getTypeReferences()) {
+                    String type = reference.getType();
+                    while (type.startsWith("[")) type = type.substring(1);
+                    if (type.startsWith("Llocal/wazemaps/") && !local.contains(type))
+                        throw new AssertionError("Cross-extension dependency in " + path + ": " + type);
+                }
             }
         }
         for (Patch<?> patch : options) {
@@ -46,6 +59,6 @@ public class ValidateBundleOptions {
             int expectedStreams = patch.getName().equals("Unlock driver moods") ? 0 : 1;
             if (streams != expectedStreams) throw new AssertionError("Unexpected extension count for " + patch.getName() + ": " + streams);
         }
-        System.out.println("PASS: exactly four independent options, all 16 selection combinations, and separately loadable theme/badge extensions on " + System.getProperty("java.vm.name"));
+        System.out.println("PASS: exactly six independent options, all 64 selection combinations, and separately loadable theme/icon/badge/Android Auto extensions on " + System.getProperty("java.vm.name"));
     }
 }

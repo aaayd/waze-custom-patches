@@ -9,21 +9,27 @@ $d8 = "$AndroidSdk\build-tools\36.0.0\d8.bat"
 New-Item -ItemType Directory -Force build\themes-dex,build\themes-extension-classes,build\themes-extension-dex,build\themes-bundle\extensions,build\themes-bundle\installer,dist | Out-Null
 if ((Get-FileHash dist\waze-aa-installer-1.0.0.apk -Algorithm SHA256).Hash -ne 'E5D442454418EFD4FF438B3ED3F6BFA5A3AEE78F52616625CB25CE0EC8855B48') { throw 'Unexpected companion installer APK.' }
 Copy-Item dist\waze-aa-installer-1.0.0.apk build\themes-bundle\installer\waze-aa-installer.apk
-& "$Jdk\bin\javac.exe" --release 11 -cp $androidJar -d build\themes-extension-classes theme-extension\src\local\wazemaps\themes\*.java
-if ($LASTEXITCODE) { throw 'Theme extension compilation failed.' }
-& "$Jdk\bin\jar.exe" cf build\themes-extension.jar -C build\themes-extension-classes .
-if ($LASTEXITCODE) { throw 'Theme extension archive failed.' }
-& $d8 --release --min-api 29 --lib $androidJar --output build\themes-extension-dex build\themes-extension.jar
-if ($LASTEXITCODE) { throw 'Theme extension DEX failed.' }
-Copy-Item build\themes-extension-dex\classes.dex build\themes-bundle\extensions\theme-selector.dex
-New-Item -ItemType Directory -Force build\themes-badge-classes,build\themes-badge-dex | Out-Null
-& "$Jdk\bin\javac.exe" --release 11 -cp $androidJar -d build\themes-badge-classes badge-extension\src\local\wazemaps\badges\BadgeSelector.java
-if ($LASTEXITCODE) { throw 'Badge extension compilation failed.' }
-& "$Jdk\bin\jar.exe" cf build\themes-badge-extension.jar -C build\themes-badge-classes .
-if ($LASTEXITCODE) { throw 'Badge extension archive failed.' }
-& $d8 --release --min-api 29 --lib $androidJar --output build\themes-badge-dex build\themes-badge-extension.jar
-if ($LASTEXITCODE) { throw 'Badge extension DEX failed.' }
-Copy-Item build\themes-badge-dex\classes.dex build\themes-bundle\extensions\badge-selector.dex
+$extensionBuildRoot = Join-Path $PSScriptRoot ('build\extensions-' + [guid]::NewGuid().ToString('N'))
+foreach ($extension in @(
+    @{ Source = 'theme-extension'; Dex = 'theme-selector.dex' },
+    @{ Source = 'badge-extension'; Dex = 'badge-selector.dex' },
+    @{ Source = 'aa-extension'; Dex = 'aa-installer.dex' },
+    @{ Source = 'icon-extension'; Dex = 'icon-pack.dex' }
+)) {
+    $extensionDir = Join-Path $extensionBuildRoot $extension.Source
+    $classes = Join-Path $extensionDir 'classes'
+    $dex = Join-Path $extensionDir 'dex'
+    $archive = Join-Path $extensionDir 'extension.jar'
+    New-Item -ItemType Directory -Force $classes,$dex | Out-Null
+    $sources = @(Get-ChildItem -LiteralPath (Join-Path $extension.Source 'src') -Filter '*.java' -Recurse | ForEach-Object { $_.FullName })
+    & "$Jdk\bin\javac.exe" --release 11 -cp $androidJar -d $classes @sources
+    if ($LASTEXITCODE) { throw "Extension compilation failed: $($extension.Source)" }
+    & "$Jdk\bin\jar.exe" cf $archive -C $classes .
+    if ($LASTEXITCODE) { throw 'Extension archive failed.' }
+    & $d8 --release --min-api 29 --lib $androidJar --output $dex $archive
+    if ($LASTEXITCODE) { throw 'Extension DEX failed.' }
+    Copy-Item (Join-Path $dex 'classes.dex') (Join-Path 'build\themes-bundle\extensions' $extension.Dex)
+}
 & .\gradlew.bat themesJar --console=plain
 if ($LASTEXITCODE) { throw 'Theme patch compilation failed.' }
 & $d8 --release --min-api 26 --lib $androidJar --classpath $desktop --output build\themes-dex build\libs\waze-theme-selector-1.9.0.jar

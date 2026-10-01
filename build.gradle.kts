@@ -30,6 +30,11 @@ kotlin { compilerOptions {
 java { targetCompatibility = JavaVersion.VERSION_11; sourceCompatibility = JavaVersion.VERSION_11 }
 tasks.jar {
     exclude("local/wazemaps/CompanionInstallerKt*.class")
+    exclude("local/wazemaps/AndroidAutoPatchKt*.class")
+    exclude("local/wazemaps/AndroidAutoResources*.class")
+    exclude("local/wazemaps/IconPackPatchKt*.class")
+    exclude("local/wazemaps/IconPackResources*.class")
+    exclude("local/wazemaps/ManifestResourcesKt*.class")
     exclude("local/wazemaps/ReportIconAssets*.class")
     exclude("local/wazemaps/ReportIconSizingPatchKt*.class")
     exclude("local/wazemaps/ReportIconSizingResources*.class")
@@ -58,6 +63,11 @@ tasks.register<Jar>("themesJar") {
     include("local/wazemaps/SelectableThemeResources*.class")
     include("local/wazemaps/ThemeColoursKt*.class")
     include("local/wazemaps/CompanionInstallerKt*.class")
+    include("local/wazemaps/AndroidAutoPatchKt*.class")
+    include("local/wazemaps/AndroidAutoResources*.class")
+    include("local/wazemaps/IconPackPatchKt*.class")
+    include("local/wazemaps/IconPackResources*.class")
+    include("local/wazemaps/ManifestResourcesKt*.class")
     include("local/wazemaps/BadgeSelectorPatchKt*.class")
     include("local/wazemaps/DriverIconsPatchKt*.class")
     include("themes/**")
@@ -66,12 +76,15 @@ tasks.register<Jar>("themesJar") {
     archiveBaseName.set("waze-theme-selector")
     archiveVersion.set(bundleVersion)
     manifest.attributes("Name" to "Waze Theme Selector", "Version" to bundleVersion.get(),
-        "Description" to "Separate themes, report icon sizing, badge selector and driver mood patches",
+        "Description" to "Independent themes, icon packs, icon sizing, badges, moods and Android Auto setup",
         "Author" to "Local custom patches", "License" to "GPL-3.0", "Patcher-Version" to "1.15.0")
 }
 
 tasks.register<Jar>("badgesJar") {
     from(sourceSets.main.get().output)
+    include("local/wazemaps/BuildTargetKt*.class")
+    include("local/wazemaps/ManifestResourcesKt*.class")
+    include("local/wazemaps/ThemeColoursKt*.class")
     include("local/wazemaps/BadgeSelectorPatchKt*.class")
     archiveBaseName.set("waze-badge-selector")
     archiveVersion.set("1.0.0")
@@ -92,6 +105,9 @@ tasks.register<Jar>("vehiclesJar") {
 
 tasks.register<Jar>("iconsJar") {
     from(sourceSets.main.get().output)
+    include("local/wazemaps/BuildTargetKt*.class")
+    include("local/wazemaps/ManifestResourcesKt*.class")
+    include("local/wazemaps/ThemeColoursKt*.class")
     include("local/wazemaps/DriverIconsPatchKt*.class")
     archiveBaseName.set("waze-driver-icons")
     archiveVersion.set("1.0.0")

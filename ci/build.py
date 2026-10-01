@@ -1,4 +1,4 @@
-"""Portable, fail-closed four-patch release builder. Requires JDK 21 + Android SDK 36."""
+"""Portable, fail-closed six-patch release builder. Requires JDK 21 + Android SDK 36."""
 import argparse
 import hashlib
 import json
@@ -16,7 +16,7 @@ DESKTOP_HASH = "36e20d7a18f655fb5829ae50aadd61217e2208536c0741df5f7799300f758f56
 COMPANION_HASH = "e5d442454418efd4ff438b3ed3f6bfa5a3aee78f52616625cb25ce0ec8855b48"
 WAZE_CERT = "03637f6c5d8f604e6fdb79a6ffbfa578de4e318f8da22fc6106665247f8807d7"
 OPTIONS = {"Selectable map themes", "Detailed report icons at normal sizes",
-           "Rank badge selector", "Unlock driver moods"}
+           "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs"}
 
 
 def sha(path):
@@ -131,7 +131,7 @@ def main():
     if sha(companion) != COMPANION_HASH:
         raise ValueError("Unexpected companion installer")
     extensions = {}
-    for folder, dex_name in [("theme-extension", "theme-selector.dex"), ("badge-extension", "badge-selector.dex")]:
+    for folder, dex_name in [("theme-extension", "theme-selector.dex"), ("badge-extension", "badge-selector.dex"), ("aa-extension", "aa-installer.dex"), ("icon-extension", "icon-pack.dex")]:
         classes = work / folder / "classes"
         dex = work / folder / "dex"
         classes.mkdir(parents=True)
@@ -142,6 +142,13 @@ def main():
         run(jar, "cf", archive, "-C", classes, ".")
         run(d8, "--release", "--min-api", "29", "--lib", android, "--output", dex, archive)
         extensions[dex_name] = dex / "classes.dex"
+    # Run the production decorators against small JVM view fixtures in every order.
+    settings_classes = work / "settings-tests"
+    settings_classes.mkdir()
+    settings_cp = os.pathsep.join([str(android)] + [str(work / (name + ".jar"))
+        for name in ["theme-extension", "icon-extension", "aa-extension"]])
+    run(javac, "-cp", settings_cp, "-d", settings_classes, *sorted((ROOT / "ci/settings-fixtures").rglob("*.java")))
+    run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateSettingsRows")
     bundle_version = f"{BUNDLE_SERIES}.{metadata['version_code']}"
     gradle = [str(ROOT / "gradlew.bat")] if windows else ["bash", str(ROOT / "gradlew")]
     run(*gradle, "themesJar", "--no-daemon", "--console=plain", f"-PwazeVersion={version}", f"-PbundleVersion={bundle_version}")
@@ -165,7 +172,18 @@ def main():
     result = json.loads(report.read_text())
     if (result.get("failedPatches") or {x["name"] for x in result.get("appliedPatches", [])} != OPTIONS
             or not result.get("patchingSteps") or any(not x["success"] for x in result["patchingSteps"])):
-        raise ValueError("All four patches must succeed before publishing")
+        raise ValueError("All six patches must succeed before publishing")
+    run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/ValidatePatchSelection.java")
+    validation_cp = os.pathsep.join([str(work), str(desktop)])
+    run(java, "-cp", validation_cp, "ValidatePatchSelection", unsigned, "true", "true", "true", metadata["version_code"])
+    for name, theme, icons, auto, filename in [
+            ("Selectable map themes", "true", "false", "false", "themes-only"),
+            ("Selectable report icon packs", "false", "true", "false", "icons-only"),
+            ("Android Auto setup", "false", "false", "true", "aa-only")]:
+        subset = work / (filename + ".apk")
+        run(java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
+            "--striplibs", "arm64-v8a", "--exclusive", "-e", name, "-p", bundle, "-o", subset, source)
+        run(java, "-cp", validation_cp, "ValidatePatchSelection", subset, theme, icons, auto, metadata["version_code"])
     aligned = work / "patched-aligned.apk"
     run(align, "-f", "-P", "16", "4", unsigned, aligned)
     patched = output / f"waze-{version}-patched-arm64.apk"
@@ -187,7 +205,7 @@ def main():
     shutil.copyfile(source, original)
     metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
-                    validation="Four patches, bundle options, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
+                    validation="Six patches, all 64 option combinations, independent theme, icon and Android Auto APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (output / "SHA256SUMS.txt").write_text("".join(f"{sha(p)}  {p.name}\n" for p in sorted(output.iterdir()) if p.is_file()))
     print(f"Release ready: {output}")

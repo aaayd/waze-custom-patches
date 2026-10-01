@@ -3,6 +3,10 @@ package local.wazemaps.themes;
 import android.app.AlertDialog;
 import android.app.Application;
 import android.content.Context;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.view.View;
+import android.widget.LinearLayout;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -59,6 +63,53 @@ public final class IconPack {
         } catch (Exception error) {
             Log.e(TAG, "Could not open icon override", error);
             return null; // Waze's unchanged original loader handles every fallback.
+        }
+    }
+
+    /** Runs independently after Waze prepares or resets its extracted resources. */
+    public static void prepare() {
+        try {
+            Context context = (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+            prepare(context);
+        } catch (Exception error) {
+            Log.e(TAG, "Could not prepare icon pack", error);
+        }
+    }
+
+    public static View decorate(View original) {
+        if (original == null) return null;
+        try {
+            if (!"map_mode".equals(original.getTag()) && !"morphe_map_mode".equals(original.getTag())) return original;
+            if (original.findViewWithTag("morphe_icon_pack") != null) return original;
+            Context context = original.getContext();
+            Class<?> type = Class.forName("com.waze.settings.tree.views.WazeSettingsView");
+            View row = (View) type.getConstructor(Context.class).newInstance(context);
+            type.getMethod("N", String.class).invoke(row, "Icon pack");
+            type.getMethod("P", String.class).invoke(row, summary(context));
+            type.getMethod("B", int.class).invoke(row, 1);
+            row.setTag("morphe_icon_pack");
+            row.setOnClickListener(view -> show(context));
+            boolean wrapped = "morphe_map_mode".equals(original.getTag());
+            LinearLayout container = wrapped ? (LinearLayout) original : new LinearLayout(context);
+            container.setOrientation(LinearLayout.VERTICAL);
+            container.setTag("morphe_map_mode");
+            if (!wrapped) container.addView(original, new LinearLayout.LayoutParams(-1, -2));
+            int position = container.findViewWithTag("morphe_themes") == null ? 1 : 2;
+            container.addView(row, position, new LinearLayout.LayoutParams(-1, -2));
+            return container;
+        } catch (Exception error) {
+            Log.e(TAG, "Could not add Icon pack setting", error);
+            return original;
+        }
+    }
+
+    private static void restart(Context context) {
+        try {
+            context.startActivity(Intent.makeRestartActivityTask(new ComponentName(context, "com.waze.FreeMapAppActivity")));
+            System.exit(0);
+        } catch (Exception error) {
+            Log.e(TAG, "Could not restart Waze", error);
+            Toast.makeText(context, "Icon pack saved. Close and reopen Waze to apply.", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -146,7 +197,7 @@ public final class IconPack {
             } catch (Exception error) { Log.e(TAG, "Could not apply icon pack", error); }
             final boolean didSave = saved;
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (didSave) { dialog.dismiss(); ThemeSelector.restart(context); }
+                if (didSave) { dialog.dismiss(); restart(context); }
                 else {
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
                     Toast.makeText(context, "Could not apply icon pack. Please try again.", Toast.LENGTH_LONG).show();

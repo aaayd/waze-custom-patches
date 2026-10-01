@@ -6,6 +6,7 @@ private object ReportIconAssets
 
 /** Shared resources are applied once, whichever public patches are selected. */
 internal val reportIconAssets = rawResourcePatch {
+    dependsOn(refreshWazeSkins)
     execute {
         fun resource(path: String) = ReportIconAssets::class.java.getResourceAsStream(path)
             ?: throw PatchException("Missing report icon resource: $path")
@@ -21,10 +22,5 @@ internal val reportIconAssets = rawResourcePatch {
             target.parentFile.mkdirs()
             target.writeBytes(image)
         }
-        // Refresh Waze's extracted resources when updating from the previous builds.
-        val manifest = get("AndroidManifest.xml").resolveSibling("AndroidManifest.xml.bin")
-        get("assets").resolveSibling("AndroidManifest.xml")
-            // Keep the existing 1030748 baseline, then increase with every upstream build.
-            .writeBytes(refreshSkinVersion(manifest.readBytes(), 1030748, increment = 16))
     }
 }

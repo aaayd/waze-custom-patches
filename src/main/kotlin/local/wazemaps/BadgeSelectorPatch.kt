@@ -17,6 +17,7 @@ val badgeSelectorPatch = bytecodePatch(
         signatures = setOf("03637f6c5d8f604e6fdb79a6ffbfa578de4e318f8da22fc6106665247f8807d7"),
         targets = listOf(AppTarget(TARGET_WAZE_VERSION))
     ))
+    dependsOn(refreshWazeSkins)
     extendWith("extensions/badge-selector.dex")
     execute {
         val mood = mutableClassDefBy("Lcom/waze/MoodManager;")

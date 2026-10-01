@@ -33,6 +33,7 @@ val driverIconsPatch = bytecodePatch(
         signatures = setOf("03637f6c5d8f604e6fdb79a6ffbfa578de4e318f8da22fc6106665247f8807d7"),
         targets = listOf(AppTarget(TARGET_WAZE_VERSION))
     ))
+    dependsOn(refreshWazeSkins)
     execute {
         val manager = mutableClassDefBy("Lcom/waze/MoodManager;")
         val canSet = manager.methods.singleOrNull {

@@ -6,13 +6,13 @@ GitHub Actions checks APKMirror at **00:00 UTC daily** (01:00 UK summer time).
 If that Waze version and versionCode already has a published release, it stops
 before downloading the app or setting up the Android build toolchain.
 Otherwise it downloads the newest uploaded release's ARM64 package, verifies
-Waze's original signing certificate on every split, and attempts all four patches.
+Waze's original signing certificate on every split, and attempts all six patches.
 
 A successful release contains:
 
 - The **untouched original** `.apkm` split package (or `.apk` if upstream supplies one).
-- A signed **pre-patched ARM64 APK** with all four patches.
-- An updated **`.mpp` Morphe bundle** with four separate options targeting that version.
+- A signed **pre-patched ARM64 APK** with all six patches.
+- An updated **`.mpp` Morphe bundle** with six separate options targeting that version.
 - Patch results, build metadata and SHA-256 checksums.
 
 Original split packages need a split-package installer or Morphe. The patched
@@ -26,7 +26,7 @@ A new version is an **attempted port**, not guaranteed compatibility. The native
 icon-sizing patch checks the exact renderer hash and instruction bytes; bytecode
 and theme patches also validate their targets. If Waze changes these, the job
 fails, retains diagnostics for 14 days and publishes nothing. It retries on the
-next night until fixed. It never silently ships a subset of the four patches.
+next night until fixed. It never silently ships a subset of the six patches.
 CI validates patching, bundle choices, signatures, package metadata and alignment;
 it does not perform a phone/emulator runtime test.
 
@@ -98,3 +98,14 @@ Older scripts may require ignored local analysis fixtures and Android tools;
 
 This is an independent custom-patch project. Waze, Google Maps and Morphe are
 third-party products; their names are used to describe compatibility.
+
+The release build verifies all 64 patch-selection dependency combinations, tests
+settings row composition in all 16 subsets/orders using JVM view fixtures, and
+patches the original package with themes alone, icons alone, Android Auto alone
+and all six options. APK checks confirm that unchecked features add no classes,
+assets, settings hooks or companion components. These checks do not replace a
+physical-device runtime test.
+
+All six options share a hidden version refresh so changing the selection can
+update a previous patched installation and refresh Waze's extracted skins.
+It does not enable any unchecked feature.

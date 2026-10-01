@@ -1,13 +1,14 @@
 # Waze Custom Patches
 
 Google Maps and OLED themes, Google Maps report icons, normal-sized detailed
-report markers, a local badge selector and unlocked driver moods.
+report markers, a local badge selector, unlocked driver moods and Android Auto setup.
+Six separate patches in one Morphe source.
 
 ## Install with Morphe
 
 1. Install [Morphe](https://morphe.software/) and [add this patch source](https://morphe.software/add-source?github=aaayd/waze-custom-patches&name=Waze%20Custom%20Patches).
 2. Download the **original ARM64 `.apkm`** from the [latest release](https://github.com/aaayd/waze-custom-patches/releases/latest).
-3. In Morphe, choose Waze and select that file from Downloads. Choose your patches. Keep **Selectable map themes** enabled for themes, Google Maps icons and Android Auto setup.
+3. In Morphe, choose Waze and select that file from Downloads. Select the features you want from the six independent patches listed below.
 4. Patch and install Waze, then open it and sign in.
 
 Prefer a ready-made app? Install the **patched ARM64 `.apk`** from the same release.
@@ -25,6 +26,17 @@ https://raw.githubusercontent.com/aaayd/waze-custom-patches/refs/heads/main/patc
 Or download the `.mpp` from the latest release and select it through
 **Sources > + > Local**.
 
+## Choose your patches
+
+- **Selectable map themes:** Original, Google Maps and OLED map colours.
+- **Selectable report icon packs:** switch between Waze and Google Maps icons.
+- **Detailed report icons at normal sizes:** detailed markers at the expected size, including when zoomed out.
+- **Rank badge selector:** change your local badge appearance.
+- **Unlock driver moods:** expose the bundled moods.
+- **Android Auto setup:** include the installer and setup prompt for the Android Auto fix.
+
+Enable any combination. The ready-made APK includes all six.
+
 ## Themes and icons
 
 Open **Waze > Settings > Map display**:
@@ -39,7 +51,7 @@ specific report artwork when zooming out.
 
 ## Waze missing from Android Auto?
 
-1. Install and start [Shizuku](https://shizuku.rikka.app/guide/setup/) using wireless debugging. Phone-only setup requires Android 11 or later.
+1. Include the **Android Auto setup** patch when patching Waze. Install and start [Shizuku](https://shizuku.rikka.app/guide/setup/) using wireless debugging. Phone-only setup requires Android 11 or later.
 2. Open Waze and sign in. Accept **Android Auto setup**, or open it from **Settings > Map display > Android Auto setup**.
 3. Install the included **Waze AA Installer** when prompted. Allow Waze to install apps if Android asks.
 4. Open Waze AA Installer, grant it Shizuku access and tap **Repair Android Auto visibility**. Confirm the Waze update in Android's installer.
@@ -48,7 +60,7 @@ specific report artwork when zooming out.
 This reinstalls your current Waze without uninstalling it or clearing its data.
 For future patches, choose **Waze AA Installer** in Morphe's installer chooser.
 Start Shizuku again after restarting your phone. If the setup row is missing,
-repatch with **Selectable map themes** enabled.
+repatch with **Android Auto setup** enabled. Themes are optional.
 
 ## Updates
 

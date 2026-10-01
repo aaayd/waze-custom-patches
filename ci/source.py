@@ -10,7 +10,7 @@ import zipfile
 from datetime import datetime, timezone
 
 OPTIONS = {"Selectable map themes", "Detailed report icons at normal sizes",
-           "Rank badge selector", "Unlock driver moods"}
+           "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs"}
 REQUIRED = {"build-info.json", "patch-report.json", "SHA256SUMS.txt"}
 
 
@@ -61,7 +61,7 @@ def make_manifest(release, files):
             or {p["name"] for p in report.get("appliedPatches", [])} != OPTIONS
             or not report.get("patchingSteps")
             or any(not step["success"] for step in report["patchingSteps"])):
-        raise ValueError("Release does not contain all four successful Waze patches")
+        raise ValueError("Release does not contain all six successful Waze patches")
     bundle = f"waze-theme-selector-{info['bundle_version']}.mpp"
     required = {bundle, f"waze-{info['version']}-original-arm64{info['extension']}",
                 f"waze-{info['version']}-patched-arm64.apk"}
@@ -71,7 +71,7 @@ def make_manifest(release, files):
         manifest = archive.read("META-INF/MANIFEST.MF").decode().replace("\r\n ", "")
         if not re.search(r"^Version: " + re.escape(info["bundle_version"]) + r"\s*$", manifest, re.MULTILINE):
             raise ValueError("Bundle manifest version differs from source version")
-        for path in ["classes.dex", "extensions/theme-selector.dex", "extensions/badge-selector.dex"]:
+        for path in ["classes.dex", "extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex"]:
             if not archive.read(path).startswith(b"dex\n"):
                 raise ValueError(f"Bundle is missing Android DEX: {path}")
     # Morphe's third-party source DTO expects a UTC LocalDateTime without a zone suffix.
@@ -82,7 +82,7 @@ def make_manifest(release, files):
         "created_at": created_at,
         "download_url": assets[bundle]["browser_download_url"],
         "page_url": release["html_url"],
-        "description": (f"Waze {info['version']} (ARM64). Four independent options: selectable map themes and icon packs with Android Auto setup; detailed report icons at normal sizes; local rank badge selector; unlock driver moods. " + info.get("changes", "")).strip(),
+        "description": (f"Waze {info['version']} (ARM64). Six independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup. " + info.get("changes", "")).strip(),
     }
 
 

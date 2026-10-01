@@ -1,14 +1,10 @@
 package local.wazemaps
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.*
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
-import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
-import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import java.util.Properties
-import java.security.MessageDigest
 
 private const val THEME_EXTENSION = "Llocal/wazemaps/themes/ThemeSelector;"
 private object SelectableThemeResources
@@ -22,31 +18,8 @@ private fun themeProperties(name: String): Map<String, String> {
 }
 
 private val selectableThemeAssets = rawResourcePatch {
-    dependsOn(reportIconAssets)
+    dependsOn(refreshWazeSkins)
     execute {
-        val companion = SelectableThemeResources::class.java.getResourceAsStream("/installer/waze-aa-installer.apk")
-            ?.use { it.readBytes() } ?: throw PatchException("Missing bundled Android Auto installer")
-        val hash = MessageDigest.getInstance("SHA-256").digest(companion).joinToString("") { "%02x".format(it) }
-        if (hash != "e5d442454418efd4ff438b3ed3f6bfa5a3aee78f52616625cb25ce0ec8855b48")
-            throw PatchException("Bundled Android Auto installer checksum mismatch")
-        get("assets/morphe/installer/waze-aa-installer.apk").apply { parentFile.mkdirs(); writeBytes(companion) }
-        // reportIconAssets has already staged the refreshed binary manifest.
-        get("assets").resolveSibling("AndroidManifest.xml").apply { writeBytes(companionManifest(readBytes())) }
-        val paths = SelectableThemeResources::class.java.getResourceAsStream("/iconpacks/paths.txt")
-            ?.bufferedReader()?.use { it.readText() } ?: throw PatchException("Missing icon pack manifest")
-        val index = get("assets/morphe/iconpacks/paths.txt")
-        index.parentFile.mkdirs()
-        index.writeText(paths)
-        for (path in paths.lineSequence().filter(String::isNotEmpty)) {
-            if (path.contains("..") || path.startsWith('/') || path.contains('\\') || !path.endsWith(".png"))
-                throw PatchException("Invalid icon asset path: $path")
-            val bytes = SelectableThemeResources::class.java.getResourceAsStream("/iconpacks/google_maps/$path")
-                ?.use { it.readBytes() } ?: throw PatchException("Missing Google Maps icon: $path")
-            if (!get("assets/res/skins/default/$path").isFile) throw PatchException("Missing Waze icon: $path")
-            val target = get("assets/morphe/iconpacks/google_maps/$path")
-            target.parentFile.mkdirs()
-            target.writeBytes(bytes)
-        }
         // Store additional palettes separately. Original APK skins remain byte-for-byte intact.
         for (variant in listOf("", "experiment/")) {
             for (mode in listOf("day", "night")) {
@@ -88,7 +61,7 @@ private val selectableThemeAssets = rawResourcePatch {
 @Suppress("unused")
 val themeSelectorPatch = bytecodePatch(
     name = "Selectable map themes",
-    description = "Add Themes, Icon pack and Android Auto setup below Dark mode. Includes Waze AA Installer with a first-launch setup offer.",
+    description = "Add a Themes selector below Dark mode with separate original, Google Maps and OLED choices for light and dark mode.",
     default = true
 ) {
     compatibleWith(Compatibility(
@@ -99,33 +72,6 @@ val themeSelectorPatch = bytecodePatch(
     dependsOn(selectableThemeAssets)
     extendWith("extensions/theme-selector.dex")
     execute {
-        val launch = mutableClassDefBy("Lcom/waze/MainActivity;").methods.single {
-            it.name == "onCreate" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/os/Bundle;") && it.returnType == "V"
-        }
-        // MainActivity reuses p0 as a String later in onCreate. At entry it is
-        // guaranteed to be the Activity; never read p0 at a return instruction.
-        // Remove our older hook if this input already contains it.
-        launch.implementation!!.instructions.toList().forEachIndexed { index, instruction ->
-            val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
-            if (ref?.definingClass == "Llocal/wazemaps/themes/CompanionInstaller;" &&
-                ref.name == "attach" && ref.parameterTypes.map(CharSequence::toString) == listOf("Landroid/app/Activity;"))
-                launch.replaceInstruction(index, "nop")
-        }
-        launch.addInstructions(0, "invoke-static/range {p0 .. p0}, Llocal/wazemaps/themes/CompanionInstaller;->attach(Landroid/app/Activity;)V")
-        val assets = mutableClassDefBy("Lcom/waze/resources/ResourcesNativeManager;").methods.single {
-            it.name == "loadAssetStream" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;") &&
-                it.returnType == "Ljava/io/InputStream;"
-        }
-        if (assets.implementation!!.registerCount < 3 || assets.implementation!!.registerCount > 15)
-            throw PatchException("Unexpected icon asset loader register layout")
-        assets.addInstructions(0, """
-            invoke-static {p1}, Llocal/wazemaps/themes/IconPack;->open(Ljava/lang/String;)Ljava/io/InputStream;
-            move-result-object v0
-            if-eqz v0, :original
-            return-object v0
-            :original
-            nop
-        """)
         val prepare = mutableClassDefBy("Lcom/waze/resources/i;").methods.single {
             it.name == "a" && it.parameterTypes.isEmpty() && it.returnType == "V"
         }

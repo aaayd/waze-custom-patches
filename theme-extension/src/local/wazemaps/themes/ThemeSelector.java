@@ -46,7 +46,6 @@ public final class ThemeSelector {
             Context context = (Context) Class.forName("k.z").getMethod("j", Class.class)
                     .invoke(null, Application.class);
             installFiles(context, selected(context, "day"), selected(context, "night"));
-            IconPack.prepare(context);
             Log.i(TAG, "Map themes prepared: light=" + selected(context, "day") + ", dark=" + selected(context, "night"));
         } catch (Exception error) {
             Log.e(TAG, "Could not prepare map themes", error);
@@ -115,23 +114,18 @@ public final class ThemeSelector {
     public static View decorate(View original) {
         if (original == null) return null;
         try {
-            if (!"map_mode".equals(original.getTag())) return original;
+            if (!"map_mode".equals(original.getTag()) && !"morphe_map_mode".equals(original.getTag())) return original;
+            if (original.findViewWithTag("morphe_themes") != null) return original;
             Context context = original.getContext();
-            LinearLayout container = new LinearLayout(context);
+            boolean wrapped = "morphe_map_mode".equals(original.getTag());
+            LinearLayout container = wrapped ? (LinearLayout) original : new LinearLayout(context);
             container.setOrientation(LinearLayout.VERTICAL);
+            container.setTag("morphe_map_mode");
             View themes = row(context, "Themes", summary(context));
             themes.setTag("morphe_themes");
             themes.setOnClickListener(view -> show(context, themes));
-            container.addView(original, new LinearLayout.LayoutParams(-1, -2));
-            container.addView(themes, new LinearLayout.LayoutParams(-1, -2));
-            View icons = row(context, "Icon pack", IconPack.summary(context));
-            icons.setTag("morphe_icon_pack");
-            icons.setOnClickListener(view -> IconPack.show(context));
-            container.addView(icons, new LinearLayout.LayoutParams(-1, -2));
-            View auto = row(context, "Android Auto setup", "Install or open Waze AA Installer");
-            auto.setTag("morphe_aa_setup");
-            auto.setOnClickListener(view -> CompanionInstaller.open(context));
-            container.addView(auto, new LinearLayout.LayoutParams(-1, -2));
+            if (!wrapped) container.addView(original, new LinearLayout.LayoutParams(-1, -2));
+            container.addView(themes, 1, new LinearLayout.LayoutParams(-1, -2));
             return container;
         } catch (Exception error) {
             Log.e(TAG, "Could not add Themes setting", error);
