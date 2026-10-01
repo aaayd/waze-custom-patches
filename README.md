@@ -2,13 +2,13 @@
 
 Google Maps and OLED themes, Google Maps report icons, normal-sized detailed
 report markers, a local badge selector, unlocked driver moods and Android Auto setup.
-Seven separate patches in one Morphe source.
+Eight separate patches in one Morphe source.
 
 ## Install with Morphe
 
 1. Install [Morphe](https://morphe.software/) and [add this patch source](https://morphe.software/add-source?github=aaayd/waze-custom-patches&name=Waze%20Custom%20Patches).
 2. Download the **original ARM64 `.apkm`** from the [latest release](https://github.com/aaayd/waze-custom-patches/releases/latest).
-3. In Morphe, choose Waze and select that file from Downloads. Select the features you want from the seven independent patches listed below.
+3. In Morphe, choose Waze and select that file from Downloads. Select the features you want from the eight independent patches listed below.
 4. Patch and install Waze, then open it and sign in.
 
 Prefer a ready-made app? Install the **patched ARM64 `.apk`** from the same release.
@@ -34,9 +34,10 @@ Or download the `.mpp` from the latest release and select it through
 - **Rank badge selector:** change your local badge appearance.
 - **Unlock driver moods:** expose the bundled moods.
 - **Android Auto setup:** include the installer and setup prompt for the Android Auto fix.
+- **Speed camera sound below speed limit:** enable camera audio at or below the limit.
 - **Android Auto police alert distance:** adjust when police/enforcement heads-up alerts appear.
 
-Enable any combination. The ready-made APK includes all seven.
+Enable any combination. The ready-made APK includes all eight.
 
 ## Themes and icons
 
@@ -63,6 +64,15 @@ Use it before removing this patch if you want those original values back.
 This changes the Android Auto heads-up distance settings. Waze still needs an
 available report, and spoken warnings follow its own rules. Actual in-car alert
 timing needs your test; automated checks verify the patch and config handling.
+
+## Speed camera sound below the limit
+
+Enable **Speed camera sound below speed limit** when patching. No extra setup
+is needed. Keep speed camera **Alert while driving** enabled in Waze and use
+**Sound on** or **Alerts only**. This does not override mute or add missing cameras.
+The setting is reapplied at startup and after configuration updates. Waze may
+persist the native setting even after this patch is removed. Driving audio still
+needs a device test; automated checks verify the setting and hooks.
 
 ## Waze missing from Android Auto?
 

@@ -15,7 +15,8 @@ foreach ($extension in @(
     @{ Source = 'badge-extension'; Dex = 'badge-selector.dex' },
     @{ Source = 'aa-extension'; Dex = 'aa-installer.dex' },
     @{ Source = 'icon-extension'; Dex = 'icon-pack.dex' },
-    @{ Source = 'alert-extension'; Dex = 'alert-distance.dex' }
+    @{ Source = 'alert-extension'; Dex = 'alert-distance.dex' },
+    @{ Source = 'camera-extension'; Dex = 'camera-sound.dex' }
 )) {
     $extensionDir = Join-Path $extensionBuildRoot $extension.Source
     $classes = Join-Path $extensionDir 'classes'
@@ -33,10 +34,10 @@ foreach ($extension in @(
 }
 & .\gradlew.bat themesJar --console=plain
 if ($LASTEXITCODE) { throw 'Theme patch compilation failed.' }
-& $d8 --release --min-api 26 --lib $androidJar --classpath $desktop --output build\themes-dex build\libs\waze-theme-selector-1.10.0.jar
+& $d8 --release --min-api 26 --lib $androidJar --classpath $desktop --output build\themes-dex build\libs\waze-theme-selector-1.11.0.jar
 if ($LASTEXITCODE) { throw 'Theme patch DEX failed.' }
-Copy-Item build\libs\waze-theme-selector-1.10.0.jar dist\waze-theme-selector-1.10.0.mpp
-& "$Jdk\bin\jar.exe" uf dist\waze-theme-selector-1.10.0.mpp -C build\themes-dex classes.dex -C build\themes-bundle extensions -C build\themes-bundle installer
+Copy-Item build\libs\waze-theme-selector-1.11.0.jar dist\waze-theme-selector-1.11.0.mpp
+& "$Jdk\bin\jar.exe" uf dist\waze-theme-selector-1.11.0.mpp -C build\themes-dex classes.dex -C build\themes-bundle extensions -C build\themes-bundle installer
 if ($LASTEXITCODE) { throw 'Theme patch packaging failed.' }
-& "$Jdk\bin\java.exe" -jar $desktop list-patches --patches dist\waze-theme-selector-1.10.0.mpp -pv
+& "$Jdk\bin\java.exe" -jar $desktop list-patches --patches dist\waze-theme-selector-1.11.0.mpp -pv
 if ($LASTEXITCODE) { throw 'Morphe could not load the theme patch.' }

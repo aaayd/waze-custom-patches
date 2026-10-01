@@ -95,7 +95,7 @@ jobs:
           path.write_bytes(base64.b64decode(value, validate=True))
           path.chmod(0o600)
           PY
-      - name: Build and validate all seven patches
+      - name: Build and validate all eight patches
         env:
           WAZE_STORE_PASSWORD: ${{ secrets.WAZE_STORE_PASSWORD }}
           WAZE_KEY_PASSWORD: ${{ secrets.WAZE_KEY_PASSWORD }}

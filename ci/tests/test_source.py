@@ -14,7 +14,7 @@ def fixture():
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as archive:
         archive.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nVersion: 1.8.1030732\r\n")
-        for name in ["classes.dex", "extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex", "extensions/alert-distance.dex"]:
+        for name in ["classes.dex", "extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex", "extensions/alert-distance.dex", "extensions/camera-sound.dex"]:
             archive.writestr(name, b"dex\n035\0")
     files = {
         "build-info.json": json.dumps({"tag": "waze-5.24.5.0-1030732", "version": "5.24.5.0",
@@ -73,7 +73,7 @@ class SourceTests(unittest.TestCase):
         report["appliedPatches"].pop()
         files["patch-report.json"] = json.dumps(report).encode()
         seal(release, files)
-        with self.assertRaisesRegex(ValueError, "seven successful"):
+        with self.assertRaisesRegex(ValueError, "eight successful"):
             source.make_manifest(release, files)
 
     def test_rejects_wrong_version_in_bundle_manifest(self):

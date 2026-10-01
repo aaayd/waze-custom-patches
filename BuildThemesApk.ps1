@@ -5,7 +5,7 @@ $env:JAVA_HOME = $Jdk
 & .\BuildThemes.ps1 -AndroidSdk $AndroidSdk -Jdk $Jdk
 if ($LASTEXITCODE) { throw 'Theme patch build failed.' }
 $apk = 'dist\waze-5.24.5.0-themes-moods-badges-arm64.apk'
-& "$Jdk\bin\java.exe" -Xmx1536m -jar tools\morphe-desktop.jar patch --bytecode-mode STRIP_SAFE -p dist\waze-theme-selector-1.10.0.mpp -o $apk -r dist\patch-result-themes-arm64.json downloads\waze-5.24.5.0-arm64.apkm
+& "$Jdk\bin\java.exe" -Xmx1536m -jar tools\morphe-desktop.jar patch --bytecode-mode STRIP_SAFE -p dist\waze-theme-selector-1.11.0.mpp -o $apk -r dist\patch-result-themes-arm64.json downloads\waze-5.24.5.0-arm64.apkm
 if ($LASTEXITCODE) { throw 'Combined patching failed.' }
 & "$AndroidSdk\build-tools\36.0.0\zipalign.exe" -f -P 16 4 $apk build\themes-aligned.apk
 if ($LASTEXITCODE) { throw 'APK alignment failed.' }

@@ -5,7 +5,7 @@ import java.io.*;
 import java.util.*;
 import java.util.zip.ZipFile;
 
-/** Check real loader metadata and dependency closure for all 128 toggle combinations. */
+/** Check real loader metadata and dependency closure for all 256 toggle combinations. */
 public class ValidateBundleOptions {
     private static void visit(Patch<?> patch, Set<Patch<?>> closure) {
         if (closure.add(patch)) for (Patch<?> dependency : patch.getDependencies()) visit(dependency, closure);
@@ -15,7 +15,7 @@ public class ValidateBundleOptions {
         PatchLoader loader = args.length > 1
             ? new PatchLoader.Dex(Set.of(bundle), new File(args[1]))
             : new PatchLoader.Jar(Set.of(bundle));
-        Set<String> expected = Set.of("Selectable map themes", "Detailed report icons at normal sizes", "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs", "Android Auto police alert distance");
+        Set<String> expected = Set.of("Selectable map themes", "Detailed report icons at normal sizes", "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs", "Android Auto police alert distance", "Speed camera sound below speed limit");
         List<Patch<?>> options = new ArrayList<>();
         Set<String> names = new HashSet<>();
         for (Patch<?> patch : loader) if (patch.getName() != null) { options.add(patch); names.add(patch.getName()); }
@@ -31,10 +31,10 @@ public class ValidateBundleOptions {
             if (!selected.equals(actual)) throw new AssertionError("Unexpected automatic selection: " + selected + " -> " + actual);
         }
         try (ZipFile zip = new ZipFile(bundle)) {
-            for (String path : List.of("extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex", "extensions/alert-distance.dex", "classes.dex")) {
+            for (String path : List.of("extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex", "extensions/alert-distance.dex", "extensions/camera-sound.dex", "classes.dex")) {
                 if (zip.getEntry(path) == null || zip.getEntry(path).getSize() == 0) throw new AssertionError("Missing DEX: " + path);
             }
-            for (String path : List.of("theme-selector.dex", "badge-selector.dex", "aa-installer.dex", "icon-pack.dex", "alert-distance.dex")) {
+            for (String path : List.of("theme-selector.dex", "badge-selector.dex", "aa-installer.dex", "icon-pack.dex", "alert-distance.dex", "camera-sound.dex")) {
                 var dex = DexBackedDexFile.fromInputStream(Opcodes.getDefault(), new BufferedInputStream(zip.getInputStream(zip.getEntry("extensions/" + path))));
                 Set<String> local = new HashSet<>();
                 for (var type : dex.getClasses()) local.add(type.getType());
@@ -59,6 +59,6 @@ public class ValidateBundleOptions {
             int expectedStreams = patch.getName().equals("Unlock driver moods") ? 0 : 1;
             if (streams != expectedStreams) throw new AssertionError("Unexpected extension count for " + patch.getName() + ": " + streams);
         }
-        System.out.println("PASS: exactly seven independent options, all 128 selection combinations, and separately loadable theme/icon/badge/Android Auto/alert extensions on " + System.getProperty("java.vm.name"));
+        System.out.println("PASS: exactly eight independent options, all 256 selection combinations, and separately loadable theme/icon/badge/Android Auto/alert/camera extensions on " + System.getProperty("java.vm.name"));
     }
 }

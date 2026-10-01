@@ -38,7 +38,8 @@ public class ValidatePatchSelection {
     public static void main(String[] args) throws Exception {
         File apk = new File(args[0]);
         boolean themes = Boolean.parseBoolean(args[1]), icons = Boolean.parseBoolean(args[2]), auto = Boolean.parseBoolean(args[3]), alerts = Boolean.parseBoolean(args[4]);
-        int originalCode = Integer.parseInt(args[5]);
+        int originalCode = Integer.parseInt(args[6]);
+        boolean camera = Boolean.parseBoolean(args[5]);
         String prefix = "Llocal/wazemaps/themes/";
         Map<String, ClassDef> classes = new HashMap<>();
         var dex = DexFileFactory.loadDexContainer(apk, Opcodes.getDefault());
@@ -73,28 +74,36 @@ public class ValidatePatchSelection {
         require(exits > 0 && themeRows == (themes ? exits : 0) && iconRows == (icons ? exits : 0) && autoRows == (auto ? exits : 0) && alertRows == (alerts ? exits : 0), "Settings hook selection mismatch");
         String alertType = "Llocal/wazemaps/alerts/AlertDistance;";
         require(classes.containsKey(alertType) == alerts, "Alert extension selection mismatch");
-        int getterHooks = 0, startupHooks = 0, syncHooks = 0;
-        for (var method : classes.get("Lcom/waze/config/c;").getMethods()) if (method.getImplementation() != null) {
-            for (var instruction : method.getImplementation().getInstructions())
-                if (calls(instruction, alertType, "override")) getterHooks++;
-        }
-        for (var method : classes.get("Lcom/waze/NativeManager;").getMethods()) if (method.getName().equals("onlineInit")) {
-            Instruction previous = null;
-            for (var instruction : method.getImplementation().getInstructions()) {
-                if (calls(instruction, alertType, "applySaved")) {
-                    require(previous != null && previous.getOpcode() == Opcode.SPUT_BOOLEAN, "Alert hook must follow native ready flag");
-                    var field = (FieldReference) ((ReferenceInstruction) previous).getReference();
-                    require(field.getName().equals("sAppStarted"), "Alert startup flag mismatch");
-                    startupHooks++;
-                }
-                previous = instruction;
+        for (String[] feature : new String[][] {
+                {alertType, "Lcom/waze/config/c;", String.valueOf(alerts)},
+                {"Llocal/wazemaps/alerts/CameraSound;", "Lcom/waze/config/b;", String.valueOf(camera)}}) {
+            boolean enabled = Boolean.parseBoolean(feature[2]);
+            require(classes.containsKey(feature[0]) == enabled, "Config extension selection mismatch: " + feature[0]);
+            int getterHooks = 0, startupHooks = 0, syncHooks = 0;
+            for (var method : classes.get(feature[1]).getMethods()) if (method.getImplementation() != null) {
+                for (var instruction : method.getImplementation().getInstructions())
+                    if (calls(instruction, feature[0], "override")) getterHooks++;
             }
+            for (var method : classes.get("Lcom/waze/NativeManager;").getMethods()) if (method.getName().equals("onlineInit")) {
+                boolean ready = false, appStart = false;
+                for (var instruction : method.getImplementation().getInstructions()) {
+                    if (instruction.getOpcode() == Opcode.SPUT_BOOLEAN) {
+                        var field = (FieldReference) ((ReferenceInstruction) instruction).getReference();
+                        if (field.getDefiningClass().equals("Lcom/waze/NativeManager;") && field.getName().equals("sAppStarted")) ready = true;
+                    }
+                    if (calls(instruction, "Lcom/waze/NativeManager;", "AppStartNTV")) appStart = true;
+                    if (calls(instruction, feature[0], "applySaved")) {
+                        require(ready && !appStart, "Config hook must follow native ready and precede app start");
+                        startupHooks++;
+                    }
+                }
+            }
+            for (var method : classes.get("Lcom/waze/ConfigManager;").getMethods()) if (method.getName().equals("onConfigSyncedFromServer")) {
+                for (var instruction : method.getImplementation().getInstructions())
+                    if (calls(instruction, feature[0], "scheduleApply")) syncHooks++;
+            }
+            require(getterHooks == (enabled ? 1 : 0) && startupHooks == (enabled ? 1 : 0) && syncHooks == (enabled ? 1 : 0), "Config hook selection mismatch: " + feature[0]);
         }
-        for (var method : classes.get("Lcom/waze/ConfigManager;").getMethods()) if (method.getName().equals("onConfigSyncedFromServer")) {
-            for (var instruction : method.getImplementation().getInstructions())
-                if (calls(instruction, alertType, "scheduleApply")) syncHooks++;
-        }
-        require(getterHooks == (alerts ? 1 : 0) && startupHooks == (alerts ? 1 : 0) && syncHooks == (alerts ? 1 : 0), "Alert hook selection mismatch");
         try (var zip = new ZipFile(apk)) {
             var asset = zip.getEntry("assets/morphe/installer/waze-aa-installer.apk");
             require((asset != null) == auto, "Installer asset selection mismatch");
@@ -105,7 +114,7 @@ public class ValidatePatchSelection {
             require((zip.getEntry("assets/morphe/iconpacks/paths.txt") != null) == icons, "Icon pack asset selection mismatch");
             require((zip.getEntry("assets/morphe/themes/oled/skin_values.day.lua") != null) == themes, "Theme asset selection mismatch");
             var manifest = AndroidManifestBlock.load(zip.getInputStream(zip.getEntry("AndroidManifest.xml")));
-            require(manifest.getVersionCode() == Math.max(1030750, originalCode + 18), "Manifest version edits did not compose");
+            require(manifest.getVersionCode() == Math.max(1030751, originalCode + 19), "Manifest version edits did not compose");
             require(manifest.getUsesPermissions().contains("android.permission.REQUEST_INSTALL_PACKAGES") == auto, "Install permission selection mismatch");
             for (String[] component : new String[][] {{"activity", "CompanionSetupActivity"}, {"provider", "CompanionApkProvider"}}) {
                 var element = named(manifest.getApplicationElement(), component[0], "local.wazemaps.themes." + component[1]);
@@ -115,6 +124,6 @@ public class ValidatePatchSelection {
             var query = named(manifest.getManifestElement().getElement("queries"), "package", "local.waze.aainstaller");
             require((query != null) == auto, "Companion query selection mismatch");
         }
-        System.out.println("PASS actual APK: themes=" + themes + ", icons=" + icons + ", Android Auto=" + auto + ", alerts=" + alerts + "; isolated classes, assets, permissions, components, startup and settings hooks");
+        System.out.println("PASS actual APK: themes=" + themes + ", icons=" + icons + ", Android Auto=" + auto + ", alerts=" + alerts + ", camera sound=" + camera + "; isolated classes, assets, permissions, components, startup and settings hooks");
     }
 }

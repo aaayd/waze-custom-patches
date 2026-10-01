@@ -1,4 +1,4 @@
-"""Portable, fail-closed seven-patch release builder. Requires JDK 21 + Android SDK 36."""
+"""Portable, fail-closed eight-patch release builder. Requires JDK 21 + Android SDK 36."""
 import argparse
 import hashlib
 import json
@@ -17,7 +17,7 @@ DESKTOP_HASH = "36e20d7a18f655fb5829ae50aadd61217e2208536c0741df5f7799300f758f56
 COMPANION_HASH = "e5d442454418efd4ff438b3ed3f6bfa5a3aee78f52616625cb25ce0ec8855b48"
 WAZE_CERT = "03637f6c5d8f604e6fdb79a6ffbfa578de4e318f8da22fc6106665247f8807d7"
 OPTIONS = {"Selectable map themes", "Detailed report icons at normal sizes",
-           "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs", "Android Auto police alert distance"}
+           "Rank badge selector", "Unlock driver moods", "Android Auto setup", "Selectable report icon packs", "Android Auto police alert distance", "Speed camera sound below speed limit"}
 
 
 def sha(path):
@@ -132,7 +132,7 @@ def main():
     if sha(companion) != COMPANION_HASH:
         raise ValueError("Unexpected companion installer")
     extensions = {}
-    for folder, dex_name in [("theme-extension", "theme-selector.dex"), ("badge-extension", "badge-selector.dex"), ("aa-extension", "aa-installer.dex"), ("icon-extension", "icon-pack.dex"), ("alert-extension", "alert-distance.dex")]:
+    for folder, dex_name in [("theme-extension", "theme-selector.dex"), ("badge-extension", "badge-selector.dex"), ("aa-extension", "aa-installer.dex"), ("icon-extension", "icon-pack.dex"), ("alert-extension", "alert-distance.dex"), ("camera-extension", "camera-sound.dex")]:
         classes = work / folder / "classes"
         dex = work / folder / "dex"
         classes.mkdir(parents=True)
@@ -147,10 +147,11 @@ def main():
     settings_classes = work / "settings-tests"
     settings_classes.mkdir()
     settings_cp = os.pathsep.join([str(android)] + [str(work / (name + ".jar"))
-        for name in ["theme-extension", "icon-extension", "aa-extension", "alert-extension"]])
+        for name in ["theme-extension", "icon-extension", "aa-extension", "alert-extension", "camera-extension"]])
     run(javac, "-cp", settings_cp, "-d", settings_classes, *sorted((ROOT / "ci/settings-fixtures").rglob("*.java")), *sorted((ROOT / "ci/alert-fixtures").rglob("*.java")))
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateSettingsRows")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateAlertDistance")
+    run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateCameraSound")
     bundle_version = f"{BUNDLE_SERIES}.{metadata['version_code']}"
     gradle = [str(ROOT / "gradlew.bat")] if windows else ["bash", str(ROOT / "gradlew")]
     run(*gradle, "themesJar", "--no-daemon", "--console=plain", f"-PwazeVersion={version}", f"-PbundleVersion={bundle_version}")
@@ -174,19 +175,20 @@ def main():
     result = json.loads(report.read_text())
     if (result.get("failedPatches") or {x["name"] for x in result.get("appliedPatches", [])} != OPTIONS
             or not result.get("patchingSteps") or any(not x["success"] for x in result["patchingSteps"])):
-        raise ValueError("All seven patches must succeed before publishing")
+        raise ValueError("All eight patches must succeed before publishing")
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/ValidatePatchSelection.java")
     validation_cp = os.pathsep.join([str(work), str(desktop)])
-    run(java, "-cp", validation_cp, "ValidatePatchSelection", unsigned, "true", "true", "true", "true", metadata["version_code"])
-    for name, theme, icons, auto, alerts, filename in [
-            ("Selectable map themes", "true", "false", "false", "false", "themes-only"),
-            ("Selectable report icon packs", "false", "true", "false", "false", "icons-only"),
-            ("Android Auto setup", "false", "false", "true", "false", "aa-only"),
-            ("Android Auto police alert distance", "false", "false", "false", "true", "alerts-only")]:
+    run(java, "-cp", validation_cp, "ValidatePatchSelection", unsigned, "true", "true", "true", "true", "true", metadata["version_code"])
+    for name, theme, icons, auto, alerts, camera, filename in [
+            ("Selectable map themes", "true", "false", "false", "false", "false", "themes-only"),
+            ("Selectable report icon packs", "false", "true", "false", "false", "false", "icons-only"),
+            ("Android Auto setup", "false", "false", "true", "false", "false", "aa-only"),
+            ("Android Auto police alert distance", "false", "false", "false", "true", "false", "alerts-only"),
+            ("Speed camera sound below speed limit", "false", "false", "false", "false", "true", "camera-only")]:
         subset = work / (filename + ".apk")
         run(java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
             "--striplibs", "arm64-v8a", "--exclusive", "-e", name, "-p", bundle, "-o", subset, source)
-        run(java, "-cp", validation_cp, "ValidatePatchSelection", subset, theme, icons, auto, alerts, metadata["version_code"])
+        run(java, "-cp", validation_cp, "ValidatePatchSelection", subset, theme, icons, auto, alerts, camera, metadata["version_code"])
     aligned = work / "patched-aligned.apk"
     run(align, "-f", "-P", "16", "4", unsigned, aligned)
     # apksig prioritises existing local ZIP alignment hints over its page-size setting.
@@ -210,7 +212,7 @@ def main():
     shutil.copyfile(source, original)
     metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
-                    validation="Seven patches, all 128 option combinations, independent theme, icon, Android Auto and alert APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
+                    validation="Eight patches, all 256 option combinations, independent theme, icon, Android Auto, alert and camera sound APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (output / "SHA256SUMS.txt").write_text("".join(f"{sha(p)}  {p.name}\n" for p in sorted(output.iterdir()) if p.is_file()))
     print(f"Release ready: {output}")
