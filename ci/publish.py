@@ -18,7 +18,7 @@ def main():
     required = [f"waze-{info['version']}-original-arm64{info['extension']}",
                 f"waze-{info['version']}-patched-arm64.apk",
                 f"waze-theme-selector-{info['bundle_version']}.mpp",
-                "SHA256SUMS.txt", "build-info.json", "patch-report.json"]
+                "SHA256SUMS.txt", "build-info.json", "patch-report.json", "native-profile.json"]
     for name in required:
         if not (root / name).is_file():
             raise ValueError(f"Missing release asset: {name}")

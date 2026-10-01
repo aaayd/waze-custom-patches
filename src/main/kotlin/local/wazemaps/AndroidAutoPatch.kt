@@ -33,7 +33,7 @@ val androidAutoPatch = bytecodePatch(
     compatibleWith(Compatibility(
         packageName = "com.waze", name = "Waze", apkFileType = ApkFileType.XAPK,
         signatures = setOf("03637f6c5d8f604e6fdb79a6ffbfa578de4e318f8da22fc6106665247f8807d7"),
-        targets = listOf(AppTarget(TARGET_WAZE_VERSION))
+        targets = TESTED_WAZE_VERSIONS.map { AppTarget(it) }
     ))
     dependsOn(androidAutoAssets)
     extendWith("extensions/aa-installer.dex")

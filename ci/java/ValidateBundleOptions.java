@@ -31,6 +31,15 @@ public class ValidateBundleOptions {
             if (!selected.equals(actual)) throw new AssertionError("Unexpected automatic selection: " + selected + " -> " + actual);
         }
         try (ZipFile zip = new ZipFile(bundle)) {
+            for (String hash : List.of("2b7cbd6c31b0cdac691dd0df6abf9639fa4feb2e9dd3923f99ce0774ca122c95", "11f1914871552e4827d1bb75bb4f9a2893579c7df0b4b72514731442fb394ef4")) {
+                var entry = zip.getEntry("themes/native-profiles/" + hash + ".properties");
+                if (entry == null) throw new AssertionError("Missing regression renderer profile: " + hash);
+                Properties profile = new Properties();
+                try (var input = zip.getInputStream(entry)) { profile.load(input); }
+                if (!hash.equals(profile.getProperty("source.sha256")) || !"2".equals(profile.getProperty("profile.schema")) ||
+                        !profile.getProperty("output.sha256", "").matches("[a-f0-9]{64}"))
+                    throw new AssertionError("Invalid renderer profile: " + hash);
+            }
             for (String path : List.of("extensions/theme-selector.dex", "extensions/badge-selector.dex", "extensions/aa-installer.dex", "extensions/icon-pack.dex", "extensions/alert-distance.dex", "extensions/camera-sound.dex", "classes.dex")) {
                 if (zip.getEntry(path) == null || zip.getEntry(path).getSize() == 0) throw new AssertionError("Missing DEX: " + path);
             }

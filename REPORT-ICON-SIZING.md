@@ -1,3 +1,10 @@
+# Automatic renderer profiles
+
+Current releases discover native icon-sizing profiles during the nightly build.
+Morphe receives exact-hash profiles for tested renderers, with full output verification.
+See [Build and release notes](BUILDING.md) for the current workflow.
+The notes below describe the original 5.24.5.0 investigation.
+
 # Report icon sizing
 
 Import **`dist/waze-theme-selector-1.7.5.mpp`** into Morphe. The bundle now contains four independent selectable patches, including these two map options:

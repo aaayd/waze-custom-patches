@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 plugins { kotlin("jvm") version "2.4.10" }
 group = "local.wazemaps"
 version = "2.0.0"
-val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.11.0")
+val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.12.0")
 val wazeVersion = providers.gradleProperty("wazeVersion").orElse("5.24.5.0")
 val generatedTarget = layout.buildDirectory.dir("generated/waze-target")
 val generateTarget by tasks.registering {
@@ -14,11 +14,12 @@ val generateTarget by tasks.registering {
         require(target.matches(Regex("[0-9]+(\\.[0-9]+){3}"))) { "Invalid Waze version" }
         generatedTarget.get().file("local/wazemaps/BuildTarget.kt").asFile.apply {
             parentFile.mkdirs()
-            writeText("package local.wazemaps\ninternal const val TARGET_WAZE_VERSION = \"$target\"\n")
+            writeText("package local.wazemaps\ninternal const val TARGET_WAZE_VERSION = \"$target\"\ninternal val TESTED_WAZE_VERSIONS = listOf(TARGET_WAZE_VERSION, \"5.24.5.0\", \"5.24.0.2\").distinct()\n")
         }
     }
 }
 kotlin.sourceSets.main { kotlin.srcDir(generatedTarget) }
+sourceSets.main { resources.srcDir(layout.buildDirectory.dir("generated/native-icons")) }
 tasks.named("compileKotlin") { dependsOn(generateTarget) }
 repositories { mavenCentral() }
 dependencies { compileOnly(files("tools/morphe-desktop.jar")) }

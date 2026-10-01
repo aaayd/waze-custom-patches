@@ -23,7 +23,7 @@ the downloadable APK. Do not uninstall to switch keys unless you intend to lose
 local app data.
 
 A new version is an **attempted port**, not guaranteed compatibility. The native
-icon-sizing patch checks the exact renderer hash and instruction bytes; bytecode
+icon-sizing builder discovers renderer functions, report groups and call sites; bytecode
 and theme patches also validate their targets. If Waze changes these, the job
 fails, retains diagnostics for 14 days and publishes nothing. It retries on the
 next night until fixed. It never silently ships a subset of the eight patches.
@@ -85,10 +85,30 @@ allows a local original package, but its actual version and certificate must mat
 `build/upstream.json`. Patch target/version metadata is generated at build time;
 source files are not rewritten by the nightly job.
 
-`src/main/resources/themes/native-report-zoom.properties` contains the currently
-supported renderer profile. A changed native library needs a reviewed update to
-this profile and appropriate renderer tests. Never disable its hash/byte guards
-merely to get a green nightly build.
+`ci/native_icons.py` discovers the renderer helpers by instruction fingerprints,
+uses the ELF unwind table to bound analysis, and follows resource-string arguments.
+It verifies every report group against `ci/native_icon_catalog.json`, including
+original image geometry and pixels. It computes branch targets and either uses
+unused executable-segment tail space or appends a separate aligned RX segment
+with a mapped program-header table. Original load addresses and permissions stay
+unchanged. The output is independently disassembled and its ELF mappings checked.
+
+The nightly build generates an exact-hash profile in `build/generated/native-icons`.
+Known regression profiles are in `src/main/resources/themes/native-profiles`.
+Morphe only applies a matching profile, checks every original instruction, and
+verifies the complete output hash before writing the renderer. Python, Capstone
+and ELF analysis run on the build host, not the phone.
+
+`ci/compatibility_fixtures.json` pins the older original packages. Every release
+also rebuilds those versions with all eight patches without forcing compatibility.
+Changed helpers, missing constructor calls, ambiguous matches, incorrect image
+geometry and unexpected architectures are rejected. A successful build does not
+prove runtime compatibility. The 5.24.0.2 renderer requires the appended-segment
+fallback; that path has structural checks but still needs a device test.
+
+ELF mapping checks follow the [Android linker loading rules](https://android.googlesource.com/platform/bionic/+/master/linker/linker_phdr.cpp).
+The old single-version profile and asset-generation script remain as a regression
+reference and are not used to discover new native offsets.
 
 Existing Windows scripts and detailed notes are retained for development:
 [themes](THEME-SELECTOR.md), [icon sizing](REPORT-ICON-SIZING.md),

@@ -87,6 +87,17 @@ For future patches, choose **Waze AA Installer** in Morphe's installer chooser.
 Start Shizuku again after restarting your phone. If the setup row is missing,
 repatch with **Android Auto setup** enabled. Themes are optional.
 
+## Supported Waze versions
+
+The bundle supports **5.24.5.0** and **5.24.0.2**, ARM64. All eight patches are
+checked against both releases. The recommended download is the latest release.
+
+Icon sizing uses a verified profile for each renderer. Nightly builds now find
+the native call sites automatically, so ordinary address changes do not need a
+manual port. Refresh the Morphe source when a new compatible bundle is released.
+An unfamiliar renderer or changed icon layout still stops the build safely.
+These are build checks; actual phone and Android Auto behaviour still needs testing.
+
 ## Updates
 
 The repository checks for new Waze releases every night at **00:00 UTC**.

@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.request import urlopen
 from release_config import BUNDLE_SERIES, RELEASE_NOTES
 from alignment import normalise_native_alignment
+from native_icons import prepare_profile, verify_patched_apk
 
 ROOT = Path(__file__).resolve().parents[1]
 DESKTOP_HASH = "36e20d7a18f655fb5829ae50aadd61217e2208536c0741df5f7799300f758f56"
@@ -119,6 +120,8 @@ def main():
     align = sdk_tools / ("zipalign.exe" if windows else "zipalign")
     native_hash = inspect_original(source, work, aapt, signer, metadata)
     metadata.update(original_sha256=sha(source), native_sha256=native_hash)
+    native_report = prepare_profile(source, ROOT / "build/generated/native-icons", output / "native-profile.json")
+    run(os.sys.executable, ROOT / "ci/native_regression.py", "--input", source)
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     desktop = ROOT / "tools" / "morphe-desktop.jar"
     desktop.parent.mkdir(exist_ok=True)
@@ -189,6 +192,37 @@ def main():
         run(java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
             "--striplibs", "arm64-v8a", "--exclusive", "-e", name, "-p", bundle, "-o", subset, source)
         run(java, "-cp", validation_cp, "ValidatePatchSelection", subset, theme, icons, auto, alerts, camera, metadata["version_code"])
+    verify_patched_apk(unsigned, native_report)
+    verified_versions = [version]
+    for fixture in json.loads((ROOT / "ci/compatibility_fixtures.json").read_text()):
+        if fixture["version"] == version:
+            continue
+        fixture_source = ROOT / "downloads" / f"waze-{fixture['version']}-original-arm64.apkm"
+        if not fixture_source.exists():
+            fixture_source.parent.mkdir(exist_ok=True)
+            if "url" in fixture:
+                with urlopen(fixture["url"], timeout=120) as response, fixture_source.open("wb") as target:
+                    shutil.copyfileobj(response, target)
+            else:
+                from upstream import download, requests
+                download(requests.Session(impersonate="chrome"), fixture, fixture_source)
+        if sha(fixture_source) != fixture["sha256"]:
+            raise ValueError("Compatibility fixture checksum changed")
+        fixture_work = work / fixture["version"]
+        fixture_work.mkdir()
+        inspect_original(fixture_source, fixture_work, aapt, signer, fixture)
+        fixture_report = prepare_profile(fixture_source, ROOT / "build/generated/native-icons", fixture_work / "native-profile.json")
+        run(os.sys.executable, ROOT / "ci/native_regression.py", "--input", fixture_source)
+        fixture_apk = fixture_work / "patched.apk"
+        fixture_result = fixture_work / "patch-report.json"
+        run(java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
+            "--striplibs", "arm64-v8a", "-p", bundle, "-o", fixture_apk, "-r", fixture_result, fixture_source)
+        applied = json.loads(fixture_result.read_text())
+        if applied.get("failedPatches") or {x["name"] for x in applied.get("appliedPatches", [])} != OPTIONS:
+            raise ValueError("Compatibility regression failed for " + fixture["version"])
+        run(java, "-cp", validation_cp, "ValidatePatchSelection", fixture_apk, "true", "true", "true", "true", "true", fixture["version_code"])
+        verify_patched_apk(fixture_apk, fixture_report)
+        verified_versions.append(fixture["version"])
     aligned = work / "patched-aligned.apk"
     run(align, "-f", "-P", "16", "4", unsigned, aligned)
     # apksig prioritises existing local ZIP alignment hints over its page-size setting.
@@ -210,9 +244,9 @@ def main():
             raise ValueError("Embedded Android Auto installer mismatch")
     original = output / f"waze-{version}-original-arm64{source.suffix}"
     shutil.copyfile(source, original)
-    metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES,
+    metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES, compatible_versions=verified_versions,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
-                    validation="Eight patches, all 256 option combinations, independent theme, icon, Android Auto, alert and camera sound APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
+                    validation="Native discovery, ELF and branch validation, pinned previous-version regression, eight patches, all 256 option combinations, independent theme, icon, Android Auto, alert and camera sound APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (output / "SHA256SUMS.txt").write_text("".join(f"{sha(p)}  {p.name}\n" for p in sorted(output.iterdir()) if p.is_file()))
     print(f"Release ready: {output}")

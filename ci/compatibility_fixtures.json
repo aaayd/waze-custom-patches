@@ -1,0 +1,14 @@
+[
+  {
+    "version": "5.24.5.0",
+    "version_code": 1030732,
+    "sha256": "3d2c2f113fa4129f70afb46785d986e3a67489aac87a8e976f68663365c71d65",
+    "url": "https://github.com/aaayd/waze-custom-patches/releases/download/waze-5.24.5.0-1030732-patches-1.11/waze-5.24.5.0-original-arm64.apkm"
+  },
+  {
+    "version": "5.24.0.2",
+    "version_code": 1030730,
+    "sha256": "a5259d8bb4e6c1fe7c09bc7b8fde3f4c2b3b8bc27b972bcb4a817ce1c71af9b4",
+    "variant_url": "https://www.apkmirror.com/apk/waze/waze-gps-maps-traffic-alerts-live-navigation/waze-navigation-live-traffic-5-24-0-2-release/waze-navigation-live-traffic-5-24-0-2-android-apk-download/"
+  }
+]

@@ -1,4 +1,4 @@
-"""Keep subtype art at each original zoom size by replacing constructor resource names."""
+"""Legacy 5.24.5.0 asset generator. New renderer discovery lives in ci/native_icons.py."""
 import hashlib,io,json,re,struct,zipfile
 from pathlib import Path
 from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM

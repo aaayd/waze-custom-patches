@@ -114,7 +114,7 @@ public class ValidatePatchSelection {
             require((zip.getEntry("assets/morphe/iconpacks/paths.txt") != null) == icons, "Icon pack asset selection mismatch");
             require((zip.getEntry("assets/morphe/themes/oled/skin_values.day.lua") != null) == themes, "Theme asset selection mismatch");
             var manifest = AndroidManifestBlock.load(zip.getInputStream(zip.getEntry("AndroidManifest.xml")));
-            require(manifest.getVersionCode() == Math.max(1030751, originalCode + 19), "Manifest version edits did not compose");
+            require(manifest.getVersionCode() == Math.max(1030752, originalCode + 20), "Manifest version edits did not compose");
             require(manifest.getUsesPermissions().contains("android.permission.REQUEST_INSTALL_PACKAGES") == auto, "Install permission selection mismatch");
             for (String[] component : new String[][] {{"activity", "CompanionSetupActivity"}, {"provider", "CompanionApkProvider"}}) {
                 var element = named(manifest.getApplicationElement(), component[0], "local.wazemaps.themes." + component[1]);
