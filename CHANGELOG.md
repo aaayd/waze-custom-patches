@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.10.1030732](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.5.0-1030732-patches-1.10) (2026-10-01)
+
+Waze 5.24.5.0 (ARM64). Seven independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance. Adds a seventh independent patch for Android Auto police/enforcement heads-up distance. Set 50 to 10000 metres in Map display, defaulting to 1200 metres, with native read-back verification and an original-distance restore option. Real car alert timing is pending user testing.
+
 ## [1.9.1030732](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.5.0-1030732-patches-1.9) (2026-10-01)
 
 Waze 5.24.5.0 (ARM64). Six independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup. Google Maps icons are now the default when no icon pack has been selected. Saved choices are retained. Traffic-report icons now use red backgrounds with white artwork. Themes, icon packs and Android Auto setup are now separate patches, making six independent options in one bundle.
