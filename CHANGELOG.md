@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.13.1030734](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.90.901-1030734-patches-1.13) (2026-10-03)
+
+Waze 5.24.90.901 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Find resource hooks, settings renderers, config getters and mood hooks by structure instead of obfuscated names. Runtime application lookups, settings methods and config identifiers are rebound to each APK. Badge artwork and controls use resource names instead of fixed IDs. Nightly builds test all eight patches on the latest Waze and both pinned older versions, plus a synthetic rename of eight classes and twenty methods. Ambiguous hooks stop publication. Native icon profiles continue to adapt automatically. Phone and Android Auto runtime testing is still required.
+
 ## [1.12.1030732](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.5.0-1030732-patches-1.12) (2026-10-01)
 
 Waze 5.24.5.0 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Native icon-sizing profiles are now discovered and verified automatically during nightly builds. Includes Waze 5.24.0.2 and 5.24.5.0 compatibility, with all eight patches tested on both. Each profile checks the exact renderer and verifies the complete patched output. Future versions still require a successful nightly build and device testing.
