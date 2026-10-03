@@ -119,8 +119,10 @@ private fun BytecodePatchContext.configId(getter: Method): String {
  */
 internal fun BytecodePatchContext.bindExtension(extension: String, context: Boolean = false, rows: Boolean = false, config: Method? = null) {
     fun api(type: String, name: String, result: String, static: Boolean, vararg parameters: String) {
-        val method = classDefBy(type).methods.filter { it.name == name && it.returnType == result && it.parameters(*parameters) }
-            .toList().unique("runtime API $type->$name")
+        val declarations = generateSequence(classDefBy(type)) { owner -> owner.superclass?.let { classDefByOrNull(it) } }
+            .map { owner -> owner.methods.filter { it.name == name && it.returnType == result && it.parameters(*parameters) }.toList() }
+            .firstOrNull { it.isNotEmpty() }.orEmpty()
+        val method = declarations.unique("runtime API $type->$name")
         if (!AccessFlags.PUBLIC.isSet(method.accessFlags) || AccessFlags.STATIC.isSet(method.accessFlags) != static)
             throw PatchException("Runtime API access changed: $type->$name")
     }
