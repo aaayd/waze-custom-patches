@@ -42,27 +42,19 @@ val iconPackPatch = bytecodePatch(
     dependsOn(selectableIconAssets)
     extendWith("extensions/icon-pack.dex")
     execute {
-        val assets = mutableClassDefBy("Lcom/waze/resources/ResourcesNativeManager;").methods.single {
-            it.name == "loadAssetStream" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;") &&
-                it.returnType == "Ljava/io/InputStream;"
-        }
-        if (assets.implementation!!.registerCount < 3 || assets.implementation!!.registerCount > 15)
+        bindExtension("Llocal/wazemaps/themes/IconPack;", context = true, rows = true)
+        val assets = assetLoader()
+        if (assets.implementation!!.registerCount < 3)
             throw PatchException("Unexpected icon asset loader register layout")
         assets.addInstructions(0, """
-            invoke-static {p1}, Llocal/wazemaps/themes/IconPack;->open(Ljava/lang/String;)Ljava/io/InputStream;
+            invoke-static/range {p1 .. p1}, Llocal/wazemaps/themes/IconPack;->open(Ljava/lang/String;)Ljava/io/InputStream;
             move-result-object v0
             if-eqz v0, :original
             return-object v0
             :original
             nop
         """)
-        val prepare = mutableClassDefBy("Lcom/waze/resources/i;").methods.single {
-            it.name == "a" && it.parameterTypes.isEmpty() && it.returnType == "V"
-        }
-        val reset = mutableClassDefBy("Lcom/waze/resources/i;").methods.single {
-            it.name == "b" && it.parameterTypes.isEmpty() && it.returnType == "V"
-        }
-        for (method in listOf(prepare, reset)) {
+        for (method in resourceHooks()) {
             val returns = method.implementation!!.instructions.mapIndexedNotNull { i, instruction ->
                 i.takeIf { instruction.opcode == Opcode.RETURN_VOID }
             }
@@ -71,11 +63,7 @@ val iconPackPatch = bytecodePatch(
                 method.addInstructions(it, "invoke-static {}, Llocal/wazemaps/themes/IconPack;->prepare()V")
             }
         }
-        val render = mutableClassDefBy("Lcom/waze/settings/tree/f;").methods.single {
-            it.name == "k" && it.returnType == "Landroid/view/View;" &&
-                it.parameterTypes.map(CharSequence::toString) == listOf("Lcom/waze/settings/de;")
-        }
-        if (render.implementation!!.registerCount > 15) throw PatchException("Unexpected settings register layout")
+        val render = settingsRenderer()
         val exits = render.implementation!!.instructions.mapIndexedNotNull { i, instruction ->
             if (instruction.opcode == Opcode.RETURN_OBJECT) i to (instruction as OneRegisterInstruction).registerA else null
         }

@@ -5,6 +5,7 @@ import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.*
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
@@ -37,27 +38,35 @@ val driverIconsPatch = bytecodePatch(
     execute {
         val manager = mutableClassDefBy("Lcom/waze/MoodManager;")
         val canSet = manager.methods.singleOrNull {
-            it.name == "canSetMood" && it.returnType == "Z" &&
-                it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/lang/String;")
+            it.returnType == "Z" && it.parameters("Landroid/content/Context;", "Ljava/lang/String;") &&
+                it.strings().containsAll(listOf("wazer_dino", "wazer_8bit", "wazer_robot"))
         } ?: throw PatchException("Expected Waze mood eligibility method")
-        val baby = manager.methods.singleOrNull { it.name == "isBaby" && it.returnType == "Z" && it.parameterTypes.isEmpty() }
+        val babyRef = canSet.calls().singleOrNull { it.definingClass == manager.type && it.returnType == "Z" && it.parameterTypes.isEmpty() }
+            ?: throw PatchException("Expected one baby-mood eligibility call")
+        val baby = manager.methods.singleOrNull { it == babyRef }
             ?: throw PatchException("Expected Waze baby-mood gate")
-        val refresh = manager.methods.singleOrNull { it.name == "refreshMoodsList" && it.parameterTypes.isEmpty() }
+        val refresh = manager.methods.singleOrNull { it.parameters() &&
+            it.calls().map { ref -> ref.name }.containsAll(listOf("getDefaultMoodListNTV", "getCustomMoodListNTV")) }
             ?: throw PatchException("Expected Waze mood catalogue loader")
         val refreshInstructions = refresh.implementation!!.instructions.toList()
         val catalogueCalls = refreshInstructions.mapIndexedNotNull { index, instruction ->
             val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
             if (reference?.definingClass == manager.type && reference.name in setOf("getDefaultMoodListNTV", "getCustomMoodListNTV")) {
-                if (reference.parameterTypes.map(CharSequence::toString) != listOf("Z", "Z") || instruction !is FiveRegisterInstruction) {
+                if (reference.parameterTypes.map(CharSequence::toString) != listOf("Z", "Z")) {
                     throw PatchException("Unexpected mood catalogue invocation")
                 }
-                index to instruction.registerD
+                val register = when (instruction) {
+                    is FiveRegisterInstruction -> instruction.registerD
+                    is RegisterRangeInstruction -> instruction.startRegister + 1
+                    else -> throw PatchException("Unknown mood invocation encoding")
+                }
+                if (register > 255) throw PatchException("Mood filter register exceeds const encoding")
+                index to register
             } else null
         }
         if (catalogueCalls.size != 2) throw PatchException("Expected two mood catalogue filters")
 
-        val activity = mutableClassDefBy("Lcom/waze/mywaze/moods/MoodsActivity;")
-        val create = activity.methods.single { it.name == "onCreate" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/os/Bundle;") }
+        val create = moodScreen()
         val instructions = create.implementation!!.instructions.toList()
         val betaField = instructions.indices.singleOrNull { index ->
             ((instructions[index] as? ReferenceInstruction)?.reference as? FieldReference)?.name == "CONFIG_VALUE_MOODS_BETA_ENABLED"
@@ -71,7 +80,7 @@ val driverIconsPatch = bytecodePatch(
             ?: throw PatchException("Beta-mood result has no register: ${result.opcode}. Select the original Waze APK.")
         val alreadyUnlocked = result.isMoodConstant(betaRegister, 1)
         if (result.opcode != Opcode.MOVE_RESULT && !alreadyUnlocked)
-            throw PatchException("Expected beta-mood result or an already-unlocked constant; found ${result.opcode}. Select waze-5.24.5.0-original-arm64.apkm from Downloads.")
+            throw PatchException("Expected beta-mood result or an already-unlocked constant; found ${result.opcode}. Select the original Waze APK from the release.")
 
         // All fingerprints validated before changing code. Only cosmetic gates are changed.
         if (!hasMoodReturn(canSet.implementation!!.instructions.toList(), 1))

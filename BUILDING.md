@@ -106,6 +106,26 @@ geometry and unexpected architectures are rejected. A successful build does not
 prove runtime compatibility. The 5.24.0.2 renderer requires the appended-segment
 fallback; that path has structural checks but still needs a device test.
 
+`WazeBindings.kt` finds bytecode hooks using string anchors, signatures, call
+relationships and field types. Resource preparation/reset, settings rendering,
+config getters, mood eligibility and badge rendering do not depend on obfuscated
+class or method names. Selected extensions have their application resolver,
+settings setters and config identifier reflection literals rebound to the actual
+APK. The native config read supplies the identifier getter; it is not guessed
+from an arbitrary integer field. Android lifecycle, XML custom view and JNI API
+contracts remain explicit boundaries.
+The badge selector resolves artwork and layout controls by resource name, and
+patching requires those resources to exist. JVM fixtures change their numeric IDs
+between runs to check that the selector does not cache old IDs. Native queue and
+login APIs used by reflection are checked before injecting the extensions.
+
+The release build also rewrites the pinned 5.24.5.0 fixture with eight renamed
+classes and twenty renamed methods, then applies all eight patches and inspects
+the resulting hooks and runtime bindings. A second fixture adds a competing
+resource hook and must be rejected. Only these synthetic fixtures bypass the
+original certificate check. They are never published or installed. These tests
+cover routine obfuscation drift, not arbitrary changes in Waze's behaviour.
+
 ELF mapping checks follow the [Android linker loading rules](https://android.googlesource.com/platform/bionic/+/master/linker/linker_phdr.cpp).
 The old single-version profile and asset-generation script remain as a regression
 reference and are not used to discover new native offsets.

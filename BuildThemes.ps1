@@ -1,6 +1,7 @@
-param([string]$AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk", [string]$Jdk = 'C:\Program Files\Android\Android Studio\jbr')
+param([string]$AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk", [string]$Jdk = 'C:\Program Files\Android\Android Studio\jbr', [string]$WazeVersion = '5.24.90.901', [string]$BundleVersion = '1.13.0')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+if ($WazeVersion -notmatch '^\d+(\.\d+){3}$' -or $BundleVersion -notmatch '^\d+(\.\d+){2}$') { throw 'Invalid Waze or bundle version.' }
 $env:JAVA_HOME = $Jdk
 $desktop = Join-Path $PSScriptRoot 'tools\morphe-desktop.jar'
 if ((Get-FileHash $desktop -Algorithm SHA256).Hash -ne '36E20D7A18F655FB5829AE50AADD61217E2208536C0741DF5F7799300F758F56') { throw 'Unexpected Morphe Desktop dependency.' }
@@ -32,14 +33,14 @@ foreach ($extension in @(
     if ($LASTEXITCODE) { throw 'Extension DEX failed.' }
     Copy-Item (Join-Path $dex 'classes.dex') (Join-Path 'build\themes-bundle\extensions' $extension.Dex)
 }
-python ci/native_icons.py --input downloads/waze-5.24.5.0-original-arm64.apkm --resource-root build/generated/native-icons --report build/native-local.json
+python ci/native_icons.py --input "downloads/waze-$WazeVersion-original-arm64.apkm" --resource-root build/generated/native-icons --report build/native-local.json
 if ($LASTEXITCODE) { throw 'Native icon discovery failed.' }
-& .\gradlew.bat themesJar --console=plain
+& .\gradlew.bat themesJar --console=plain "-PwazeVersion=$WazeVersion" "-PbundleVersion=$BundleVersion"
 if ($LASTEXITCODE) { throw 'Theme patch compilation failed.' }
-& $d8 --release --min-api 26 --lib $androidJar --classpath $desktop --output build\themes-dex build\libs\waze-theme-selector-1.12.0.jar
+& $d8 --release --min-api 26 --lib $androidJar --classpath $desktop --output build\themes-dex "build\libs\waze-theme-selector-$BundleVersion.jar"
 if ($LASTEXITCODE) { throw 'Theme patch DEX failed.' }
-Copy-Item build\libs\waze-theme-selector-1.12.0.jar dist\waze-theme-selector-1.12.0.mpp
-& "$Jdk\bin\jar.exe" uf dist\waze-theme-selector-1.12.0.mpp -C build\themes-dex classes.dex -C build\themes-bundle extensions -C build\themes-bundle installer
+Copy-Item "build\libs\waze-theme-selector-$BundleVersion.jar" "dist\waze-theme-selector-$BundleVersion.mpp"
+& "$Jdk\bin\jar.exe" uf "dist\waze-theme-selector-$BundleVersion.mpp" -C build\themes-dex classes.dex -C build\themes-bundle extensions -C build\themes-bundle installer
 if ($LASTEXITCODE) { throw 'Theme patch packaging failed.' }
-& "$Jdk\bin\java.exe" -jar $desktop list-patches --patches dist\waze-theme-selector-1.12.0.mpp -pv
+& "$Jdk\bin\java.exe" -jar $desktop list-patches --patches "dist\waze-theme-selector-$BundleVersion.mpp" -pv
 if ($LASTEXITCODE) { throw 'Morphe could not load the theme patch.' }

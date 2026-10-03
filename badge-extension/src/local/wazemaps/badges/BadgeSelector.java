@@ -14,15 +14,19 @@ public final class BadgeSelector {
     private static final String ROW_TAG = "morphe_badge_selector_row";
     private static final int[] VALUES = {-2, -1, 0, 1, 2, 3, 6};
     private static final String[] LABELS = {"Automatic (account badge)", "No badge", "Crown", "Sword", "Shield", "Map editor", "Wings"};
-    private static final int[] DRAWABLES = {2131231370, 2131233105, 2131232960, 2131231428, 0, 0, 2131233348};
+    private static final String[] DRAWABLES = {"crown", "sword", "shield", "edit", null, null, "wings"};
+    private static int resource(Context context, String type, String name) {
+        return context.getResources().getIdentifier(name, type, context.getPackageName());
+    }
     public static int selection(Context context) {
         int value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("badge", -2);
         for (int allowed : VALUES) if (value == allowed) return value;
         return -2;
     }
     public static Drawable drawable(Context context, int value) {
-        if (value < 0 || value >= DRAWABLES.length || DRAWABLES[value] == 0) return null;
-        return context.getDrawable(DRAWABLES[value]);
+        if (value < 0 || value >= DRAWABLES.length || DRAWABLES[value] == null) return null;
+        int id = resource(context, "drawable", DRAWABLES[value]);
+        return id == 0 ? null : context.getDrawable(id);
     }
     private static int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
@@ -33,7 +37,7 @@ public final class BadgeSelector {
         return 0;
     }
     public static void install(Activity activity) {
-        View listView = activity.findViewById(2131363009);
+        View listView = activity.findViewById(resource(activity, "id", "moodList"));
         if (listView == null || !(listView.getParent() instanceof RelativeLayout)) return;
         RelativeLayout parent = (RelativeLayout) listView.getParent();
         if (parent.findViewWithTag(ROW_TAG) != null) return;
@@ -83,7 +87,8 @@ public final class BadgeSelector {
             }).setNegativeButton("Cancel", null).show());
 
         RelativeLayout.LayoutParams rowParams = new RelativeLayout.LayoutParams(-1, -2);
-        rowParams.addRule(RelativeLayout.BELOW, 2131362720);
+        int header = resource(activity, "id", "headerView");
+        if (header != 0) rowParams.addRule(RelativeLayout.BELOW, header);
         parent.addView(row, rowParams);
         RelativeLayout.LayoutParams listParams = (RelativeLayout.LayoutParams) listView.getLayoutParams();
         listParams.addRule(RelativeLayout.BELOW, row.getId());

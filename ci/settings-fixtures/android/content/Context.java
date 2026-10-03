@@ -2,6 +2,10 @@ package android.content;
 import java.lang.reflect.Proxy;
 import java.util.*;
 public class Context {
+ public final android.content.res.Resources resources=new android.content.res.Resources();
+ public android.content.res.Resources getResources() { return resources; }
+ public String getPackageName() { return "com.waze"; }
+ public android.graphics.drawable.Drawable getDrawable(int id) { return new android.graphics.drawable.Drawable(id); }
  public String saved;
  public boolean failNextCommit;
  public final Map<String,Map<String,Object>> stores=new HashMap<>();

@@ -1,3 +1,3 @@
 """Bump the series when publishing changed patches for an existing Waze version."""
-BUNDLE_SERIES = "1.12"
-RELEASE_NOTES = "Native icon-sizing profiles are now discovered and verified automatically during nightly builds. Includes Waze 5.24.0.2 and 5.24.5.0 compatibility, with all eight patches tested on both. Each profile checks the exact renderer and verifies the complete patched output. Future versions still require a successful nightly build and device testing."
+BUNDLE_SERIES = "1.13"
+RELEASE_NOTES = "Find resource hooks, settings renderers, config getters and mood hooks by structure instead of obfuscated names. Runtime application lookups, settings methods and config identifiers are rebound to each APK. Badge artwork and controls use resource names instead of fixed IDs. Nightly builds test all eight patches on the latest Waze and both pinned older versions, plus a synthetic rename of eight classes and twenty methods. Ambiguous hooks stop publication. Native icon profiles continue to adapt automatically. Phone and Android Auto runtime testing is still required."

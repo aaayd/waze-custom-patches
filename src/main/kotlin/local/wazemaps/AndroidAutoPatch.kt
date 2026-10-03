@@ -38,6 +38,7 @@ val androidAutoPatch = bytecodePatch(
     dependsOn(androidAutoAssets)
     extendWith("extensions/aa-installer.dex")
     execute {
+        bindExtension("Llocal/wazemaps/themes/AndroidAutoSettings;", context = false, rows = true)
         val launch = mutableClassDefBy("Lcom/waze/MainActivity;").methods.single {
             it.name == "onCreate" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/os/Bundle;") && it.returnType == "V"
         }
@@ -51,11 +52,7 @@ val androidAutoPatch = bytecodePatch(
                 launch.replaceInstruction(index, "nop")
         }
         launch.addInstructions(0, "invoke-static/range {p0 .. p0}, Llocal/wazemaps/themes/CompanionInstaller;->attach(Landroid/app/Activity;)V")
-        val render = mutableClassDefBy("Lcom/waze/settings/tree/f;").methods.single {
-            it.name == "k" && it.returnType == "Landroid/view/View;" &&
-                it.parameterTypes.map(CharSequence::toString) == listOf("Lcom/waze/settings/de;")
-        }
-        if (render.implementation!!.registerCount > 15) throw PatchException("Unexpected settings register layout")
+        val render = settingsRenderer()
         val exits = render.implementation!!.instructions.mapIndexedNotNull { i, instruction ->
             if (instruction.opcode == Opcode.RETURN_OBJECT) i to (instruction as OneRegisterInstruction).registerA else null
         }

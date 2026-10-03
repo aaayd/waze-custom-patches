@@ -150,9 +150,10 @@ def main():
     settings_classes = work / "settings-tests"
     settings_classes.mkdir()
     settings_cp = os.pathsep.join([str(android)] + [str(work / (name + ".jar"))
-        for name in ["theme-extension", "icon-extension", "aa-extension", "alert-extension", "camera-extension"]])
+        for name in ["theme-extension", "icon-extension", "aa-extension", "alert-extension", "camera-extension", "badge-extension"]])
     run(javac, "-cp", settings_cp, "-d", settings_classes, *sorted((ROOT / "ci/settings-fixtures").rglob("*.java")), *sorted((ROOT / "ci/alert-fixtures").rglob("*.java")))
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateSettingsRows")
+    run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateBadgeResources")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateAlertDistance")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateCameraSound")
     bundle_version = f"{BUNDLE_SERIES}.{metadata['version_code']}"
@@ -223,6 +224,34 @@ def main():
         run(java, "-cp", validation_cp, "ValidatePatchSelection", fixture_apk, "true", "true", "true", "true", "true", fixture["version_code"])
         verify_patched_apk(fixture_apk, fixture_report)
         verified_versions.append(fixture["version"])
+    # Only synthetic, unsigned test inputs bypass certificate matching. Real releases above never do.
+    run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/MutateBindingFixture.java")
+    mutation_source = ROOT / "downloads/waze-5.24.5.0-original-arm64.apkm"
+    if not mutation_source.exists() and version == "5.24.5.0":
+        mutation_source = source
+    fixture_identity = next(f for f in json.loads((ROOT / "ci/compatibility_fixtures.json").read_text()) if f["version"] == "5.24.5.0")
+    if sha(mutation_source) != fixture_identity["sha256"]:
+        raise ValueError("Obfuscation test requires the pinned original fixture")
+    for mode in ("renamed", "ambiguous"):
+        synthetic = work / f"{mode}.apkm"
+        run(java, "-Xmx4g", "-cp", validation_cp, "MutateBindingFixture", mutation_source, synthetic, mode)
+        synthetic_apk = work / f"{mode}-patched.apk"
+        synthetic_report = work / f"{mode}-patch-report.json"
+        command = [java, "-Xmx4g", "-jar", desktop, "patch", "--force", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
+                   "--striplibs", "arm64-v8a", "-p", bundle, "-o", synthetic_apk, "-r", synthetic_report]
+        if mode == "renamed":
+            run(*command, synthetic)
+            applied = json.loads(synthetic_report.read_text())
+            if applied.get("failedPatches") or {x["name"] for x in applied.get("appliedPatches", [])} != OPTIONS:
+                raise ValueError("Renamed fixture did not apply all eight patches")
+            run(java, "-cp", validation_cp, "ValidatePatchSelection", synthetic_apk, "true", "true", "true", "true", "true", 1030732)
+        else:
+            result = subprocess.run([str(x) for x in command + ["--exclusive", "-e", "Selectable map themes", synthetic]],
+                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            (work / "ambiguous.log").write_text(result.stdout)
+            if result.returncode == 0 or "resource preparation matched 2 candidates" not in result.stdout:
+                raise ValueError("Ambiguous resource hook was not rejected for the expected reason")
+            print("PASS: ambiguous resource hook rejected before publishing", flush=True)
     aligned = work / "patched-aligned.apk"
     run(align, "-f", "-P", "16", "4", unsigned, aligned)
     # apksig prioritises existing local ZIP alignment hints over its page-size setting.
@@ -246,7 +275,7 @@ def main():
     shutil.copyfile(source, original)
     metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES, compatible_versions=verified_versions,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
-                    validation="Native discovery, ELF and branch validation, pinned previous-version regression, eight patches, all 256 option combinations, independent theme, icon, Android Auto, alert and camera sound APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
+                    validation="Structural bytecode discovery, runtime reflection bindings, eight-class/twenty-method synthetic obfuscation and ambiguous-hook rejection, native discovery, ELF and branch validation, pinned previous-version regression, eight patches, all 256 option combinations, independent feature APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (output / "SHA256SUMS.txt").write_text("".join(f"{sha(p)}  {p.name}\n" for p in sorted(output.iterdir()) if p.is_file()))
     print(f"Release ready: {output}")

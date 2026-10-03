@@ -26,20 +26,8 @@ val policeAlertDistancePatch = bytecodePatch(
     dependsOn(refreshWazeSkins)
     extendWith("extensions/alert-distance.dex")
     execute {
-        val values = mutableClassDefBy("Lcom/waze/config/ConfigValues;")
-        for (name in listOf("CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE", "CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE_NORMAL", "CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE_FREEWAY")) {
-            if (values.fields.count { it.name == name && it.type == "Lcom/waze/config/c;" } != 1)
-                throw PatchException("Required Android Auto distance config missing: $name")
-        }
-        val getter = mutableClassDefBy("Lcom/waze/config/c;").methods.singleOrNull {
-            it.name == "a" && it.parameterTypes.isEmpty() && it.returnType == "Ljava/lang/Long;"
-        } ?: throw PatchException("Numeric config getter missing")
-        if (getter.implementation == null || getter.implementation!!.registerCount < 2 ||
-            getter.implementation!!.instructions.none {
-                val ref = (it as? ReferenceInstruction)?.reference as? MethodReference
-                ref?.definingClass == "Lcom/waze/config/h;" && ref.name == "a" &&
-                    ref.parameterTypes.map(CharSequence::toString) == listOf("Lcom/waze/config/c;") && ref.returnType == "J"
-            }) throw PatchException("Unexpected Waze numeric config getter")
+        val getter = configGetter(listOf("CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE", "CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE_NORMAL", "CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE_FREEWAY"), "Ljava/lang/Long;", "J")
+        bindExtension(ALERT_EXTENSION, context = true, rows = true, config = getter)
         val manager = mutableClassDefBy("Lcom/waze/ConfigManager;")
         for ((name, parameters, result) in listOf(
             Triple("getConfigValueLongNTV", listOf("I"), "J"),
@@ -66,14 +54,11 @@ val policeAlertDistancePatch = bytecodePatch(
             i.takeIf { instruction.opcode == Opcode.RETURN_VOID }
         }.orEmpty()
         if (syncReturns.isEmpty()) throw PatchException("Config refresh exit missing")
-        val render = mutableClassDefBy("Lcom/waze/settings/tree/f;").methods.single {
-            it.name == "k" && it.returnType == "Landroid/view/View;" &&
-                it.parameterTypes.map(CharSequence::toString) == listOf("Lcom/waze/settings/de;")
-        }
+        val render = settingsRenderer()
         val exits = render.implementation!!.instructions.mapIndexedNotNull { i, instruction ->
             if (instruction.opcode == Opcode.RETURN_OBJECT) i to (instruction as OneRegisterInstruction).registerA else null
         }
-        if (render.implementation!!.registerCount > 15 || exits.isEmpty()) throw PatchException("Unexpected settings renderer")
+        if (exits.isEmpty()) throw PatchException("Unexpected settings renderer")
         getter.addInstructions(0, """
             invoke-static/range {p0 .. p0}, $ALERT_EXTENSION->override(Ljava/lang/Object;)Ljava/lang/Long;
             move-result-object v0

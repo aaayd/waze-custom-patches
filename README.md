@@ -89,14 +89,16 @@ repatch with **Android Auto setup** enabled. Themes are optional.
 
 ## Supported Waze versions
 
-The bundle supports **5.24.5.0** and **5.24.0.2**, ARM64. All eight patches are
-checked against both releases. The recommended download is the latest release.
+The bundle supports **5.24.90.901**, **5.24.5.0** and **5.24.0.2**, ARM64. All eight
+patches are build-tested on these versions. Use the original package provided
+with the latest release.
 
-Icon sizing uses a verified profile for each renderer. Nightly builds now find
-the native call sites automatically, so ordinary address changes do not need a
-manual port. Refresh the Morphe source when a new compatible bundle is released.
-An unfamiliar renderer or changed icon layout still stops the build safely.
-These are build checks; actual phone and Android Auto behaviour still needs testing.
+Nightly builds discover internal hooks and native icon offsets automatically,
+including renamed classes and methods. Refresh the Morphe source and use the
+new release's original APK when an update is available. If Waze changes a feature's
+structure enough that it cannot be identified reliably, publication stops and
+the previous release remains available. Phone and Android Auto behaviour still
+needs testing.
 
 ## Updates
 

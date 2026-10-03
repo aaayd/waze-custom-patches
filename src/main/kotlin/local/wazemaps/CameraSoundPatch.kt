@@ -23,20 +23,8 @@ val cameraSoundPatch = bytecodePatch(
     dependsOn(refreshWazeSkins)
     extendWith("extensions/camera-sound.dex")
     execute {
-        val values = mutableClassDefBy("Lcom/waze/config/ConfigValues;")
-        for (name in listOf("CONFIG_VALUE_ALERTS_PLAY_SPEED_CAMERA_SOUND_BELOW_SPEED_LIMIT")) {
-            if (values.fields.count { it.name == name && it.type == "Lcom/waze/config/b;" } != 1)
-                throw PatchException("Required camera sound config missing: $name")
-        }
-        val getter = mutableClassDefBy("Lcom/waze/config/b;").methods.singleOrNull {
-            it.name == "a" && it.parameterTypes.isEmpty() && it.returnType == "Ljava/lang/Boolean;"
-        } ?: throw PatchException("Boolean config getter missing")
-        if (getter.implementation == null || getter.implementation!!.registerCount < 2 ||
-            getter.implementation!!.instructions.none {
-                val ref = (it as? ReferenceInstruction)?.reference as? MethodReference
-                ref?.definingClass == "Lcom/waze/config/h;" && ref.name == "k" &&
-                    ref.parameterTypes.map(CharSequence::toString) == listOf("Lcom/waze/config/b;") && ref.returnType == "Z"
-            }) throw PatchException("Unexpected Waze boolean config getter")
+        val getter = configGetter(listOf("CONFIG_VALUE_ALERTS_PLAY_SPEED_CAMERA_SOUND_BELOW_SPEED_LIMIT"), "Ljava/lang/Boolean;", "Z")
+        bindExtension(CAMERA_EXTENSION, context = false, rows = false, config = getter)
         val manager = mutableClassDefBy("Lcom/waze/ConfigManager;")
         for ((name, parameters, result) in listOf(
             Triple("getConfigValueBoolNTV", listOf("I"), "Z"),

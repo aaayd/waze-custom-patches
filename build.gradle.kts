@@ -3,8 +3,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 plugins { kotlin("jvm") version "2.4.10" }
 group = "local.wazemaps"
 version = "2.0.0"
-val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.12.0")
-val wazeVersion = providers.gradleProperty("wazeVersion").orElse("5.24.5.0")
+val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.13.0")
+val wazeVersion = providers.gradleProperty("wazeVersion").orElse("5.24.90.901")
 val generatedTarget = layout.buildDirectory.dir("generated/waze-target")
 val generateTarget by tasks.registering {
     inputs.property("wazeVersion", wazeVersion)
@@ -59,6 +59,7 @@ tasks.jar {
 tasks.register<Jar>("themesJar") {
     from(sourceSets.main.get().output)
     include("local/wazemaps/BuildTargetKt*.class")
+    include("local/wazemaps/WazeBindingsKt*.class")
     include("local/wazemaps/ReportIconAssets*.class")
     include("local/wazemaps/ReportIconSizingPatchKt*.class")
     include("local/wazemaps/ReportIconSizingResources*.class")
@@ -88,6 +89,7 @@ tasks.register<Jar>("themesJar") {
 tasks.register<Jar>("badgesJar") {
     from(sourceSets.main.get().output)
     include("local/wazemaps/BuildTargetKt*.class")
+    include("local/wazemaps/WazeBindingsKt*.class")
     include("local/wazemaps/ManifestResourcesKt*.class")
     include("local/wazemaps/ThemeColoursKt*.class")
     include("local/wazemaps/BadgeSelectorPatchKt*.class")
@@ -111,6 +113,7 @@ tasks.register<Jar>("vehiclesJar") {
 tasks.register<Jar>("iconsJar") {
     from(sourceSets.main.get().output)
     include("local/wazemaps/BuildTargetKt*.class")
+    include("local/wazemaps/WazeBindingsKt*.class")
     include("local/wazemaps/ManifestResourcesKt*.class")
     include("local/wazemaps/ThemeColoursKt*.class")
     include("local/wazemaps/DriverIconsPatchKt*.class")

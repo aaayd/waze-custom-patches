@@ -3,6 +3,7 @@ import com.android.tools.smali.dexlib2.iface.*;
 import com.android.tools.smali.dexlib2.iface.instruction.*;
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference;
+import com.android.tools.smali.dexlib2.iface.reference.StringReference;
 import com.reandroid.arsc.chunk.xml.*;
 import java.io.*;
 import java.security.MessageDigest;
@@ -35,6 +36,71 @@ public class ValidatePatchSelection {
         return reference instanceof MethodReference && ((MethodReference) reference).getDefiningClass().equals(type)
             && ((MethodReference) reference).getName().equals(name);
     }
+    static List<Method> methods(Map<String, ClassDef> classes) {
+        List<Method> result = new ArrayList<>();
+        for (var type : classes.values()) if (!type.getType().startsWith("Llocal/wazemaps/"))
+            for (var method : type.getMethods()) if (method.getImplementation() != null) result.add(method);
+        return result;
+    }
+    static Set<String> strings(Method method) {
+        Set<String> result = new HashSet<>();
+        if (method.getImplementation() != null) for (var instruction : method.getImplementation().getInstructions()) {
+            if (instruction instanceof ReferenceInstruction && ((ReferenceInstruction) instruction).getReference() instanceof StringReference)
+                result.add(((StringReference) ((ReferenceInstruction) instruction).getReference()).getString());
+        }
+        return result;
+    }
+    static String configType(Map<String, ClassDef> classes, String field) {
+        for (var value : classes.get("Lcom/waze/config/ConfigValues;").getFields()) if (value.getName().equals(field)) return value.getType();
+        throw new AssertionError("Config field missing: " + field);
+    }
+    static Method only(List<Method> methods, String label) {
+        require(methods.size() == 1, label + " candidates: " + methods.size());
+        return methods.get(0);
+    }
+    static boolean delegatesToAbstract(Method method, Map<String, ClassDef> classes) {
+        for (var instruction : method.getImplementation().getInstructions()) if (instruction instanceof ReferenceInstruction) {
+            var ref = ((ReferenceInstruction) instruction).getReference();
+            if (ref instanceof MethodReference && ((MethodReference) ref).getDefiningClass().equals(method.getDefiningClass()))
+                for (var target : classes.get(method.getDefiningClass()).getMethods())
+                    if (target.equals(ref) && target.getReturnType().equals("Landroid/view/View;") && AccessFlags.ABSTRACT.isSet(target.getAccessFlags())) return true;
+        }
+        return false;
+    }
+    static void bindings(Map<String, ClassDef> classes, String extension, boolean context, boolean rows) {
+        Set<String> actual = new HashSet<>();
+        for (var type : classes.values()) if (type.getType().equals(extension) || type.getType().startsWith(extension.replace(";", "$")))
+            for (var method : type.getMethods()) actual.addAll(strings(method));
+        if (context) {
+            Method prepare = only(methods(classes).stream().filter(m -> strings(m).contains("Resources extraction unnecessary")).toList(), "resource preparation");
+            List<MethodReference> resolvers = new ArrayList<>();
+            for (var instruction : prepare.getImplementation().getInstructions()) if (instruction instanceof ReferenceInstruction) {
+                var ref = ((ReferenceInstruction) instruction).getReference();
+                if (ref instanceof MethodReference) {
+                    var method = (MethodReference) ref;
+                    if (method.getReturnType().equals("Ljava/lang/Object;") && method.getParameterTypes().toString().equals("[Ljava/lang/Class;]")) resolvers.add(method);
+                }
+            }
+            require(resolvers.size() == 1, "Application resolver ambiguous");
+            var resolver = resolvers.get(0);
+            String owner = resolver.getDefiningClass().substring(1, resolver.getDefiningClass().length() - 1).replace('/', '.');
+            require(actual.contains(owner) && actual.contains(resolver.getName()), "Runtime application lookup was not rebound: " + extension);
+        }
+        if (rows) {
+            List<Method> setters = new ArrayList<>();
+            for (var method : classes.get("Lcom/waze/settings/tree/views/WazeSettingsView;").getMethods()) if (method.getImplementation() != null && method.getReturnType().equals("V")) {
+                List<MethodReference> calls = new ArrayList<>();
+                for (var instruction : method.getImplementation().getInstructions()) if (instruction instanceof ReferenceInstruction && ((ReferenceInstruction) instruction).getReference() instanceof MethodReference)
+                    calls.add((MethodReference) ((ReferenceInstruction) instruction).getReference());
+                boolean text = method.getParameterTypes().toString().equals("[Ljava/lang/String;]") &&
+                    ((calls.size() == 1 && calls.get(0).getName().equals("setText")) || calls.stream().anyMatch(c -> c.getName().equals("getHint")));
+                boolean style = method.getParameterTypes().toString().equals("[I]") && strings(method).contains("layout_inflater");
+                if (text || style) setters.add(method);
+            }
+            require(setters.size() == 3, "Settings setter structure changed");
+            for (var setter : setters) require(actual.contains(setter.getName()), "Runtime settings method was not rebound: " + extension + setter.getName());
+        }
+    }
     public static void main(String[] args) throws Exception {
         File apk = new File(args[0]);
         boolean themes = Boolean.parseBoolean(args[1]), icons = Boolean.parseBoolean(args[2]), auto = Boolean.parseBoolean(args[3]), alerts = Boolean.parseBoolean(args[4]);
@@ -62,7 +128,8 @@ public class ValidatePatchSelection {
             index++;
         }
         require(attach == (auto ? 1 : 0), "Unexpected startup hook count");
-        var render = method(classes, "Lcom/waze/settings/tree/f;", "k", "Lcom/waze/settings/de;");
+        var render = only(methods(classes).stream().filter(m -> m.getReturnType().equals("Landroid/view/View;") &&
+            m.getParameterTypes().size() == 1 && AccessFlags.FINAL.isSet(m.getAccessFlags()) && strings(m).contains("page") && delegatesToAbstract(m, classes)).toList(), "settings renderer");
         int exits = 0, themeRows = 0, iconRows = 0, autoRows = 0, alertRows = 0;
         for (var instruction : render.getImplementation().getInstructions()) {
             if (instruction.getOpcode() == Opcode.RETURN_OBJECT) exits++;
@@ -75,8 +142,8 @@ public class ValidatePatchSelection {
         String alertType = "Llocal/wazemaps/alerts/AlertDistance;";
         require(classes.containsKey(alertType) == alerts, "Alert extension selection mismatch");
         for (String[] feature : new String[][] {
-                {alertType, "Lcom/waze/config/c;", String.valueOf(alerts)},
-                {"Llocal/wazemaps/alerts/CameraSound;", "Lcom/waze/config/b;", String.valueOf(camera)}}) {
+                {alertType, configType(classes, "CONFIG_VALUE_ANDROID_AUTO_HEADS_UP_DISTANCE"), String.valueOf(alerts)},
+                {"Llocal/wazemaps/alerts/CameraSound;", configType(classes, "CONFIG_VALUE_ALERTS_PLAY_SPEED_CAMERA_SOUND_BELOW_SPEED_LIMIT"), String.valueOf(camera)}}) {
             boolean enabled = Boolean.parseBoolean(feature[2]);
             require(classes.containsKey(feature[0]) == enabled, "Config extension selection mismatch: " + feature[0]);
             int getterHooks = 0, startupHooks = 0, syncHooks = 0;
@@ -103,7 +170,29 @@ public class ValidatePatchSelection {
                     if (calls(instruction, feature[0], "scheduleApply")) syncHooks++;
             }
             require(getterHooks == (enabled ? 1 : 0) && startupHooks == (enabled ? 1 : 0) && syncHooks == (enabled ? 1 : 0), "Config hook selection mismatch: " + feature[0]);
+            if (enabled) {
+                Set<String> literals = new HashSet<>();
+                for (var type : classes.values()) if (type.getType().equals(feature[0]) || type.getType().startsWith(feature[0].replace(";", "$")))
+                    for (var method : type.getMethods()) literals.addAll(strings(method));
+                String nativeGetter = feature[0].equals(alertType) ? "getConfigValueLongNTV" : "getConfigValueBoolNTV";
+                int bindings = 0;
+                for (var method : classes.get("Lcom/waze/ConfigManager;").getMethods()) if (method.getImplementation() != null &&
+                        method.getParameterTypes().toString().equals("[" + feature[1] + "]")) {
+                    List<Instruction> instructions = new ArrayList<>();
+                    method.getImplementation().getInstructions().forEach(instructions::add);
+                    for (int i = 2; i < instructions.size(); i++) if (calls(instructions.get(i), "Lcom/waze/ConfigManager;", nativeGetter)) {
+                        var id = (MethodReference) ((ReferenceInstruction) instructions.get(i - 2)).getReference();
+                        require(literals.contains(id.getName()), "Config identifier reflection was not rebound: " + feature[0]);
+                        bindings++;
+                    }
+                }
+                require(bindings == 1, "Expected one native config identifier binding");
+            }
         }
+        if (themes) bindings(classes, prefix + "ThemeSelector;", true, true);
+        if (icons) bindings(classes, prefix + "IconPack;", true, true);
+        if (alerts) bindings(classes, alertType, true, true);
+        if (auto) bindings(classes, prefix + "AndroidAutoSettings;", false, true);
         try (var zip = new ZipFile(apk)) {
             var asset = zip.getEntry("assets/morphe/installer/waze-aa-installer.apk");
             require((asset != null) == auto, "Installer asset selection mismatch");
