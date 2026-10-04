@@ -1,7 +1,7 @@
 {
-  "version": "1.13.1030734",
-  "created_at": "2026-10-03T19:59:05",
-  "download_url": "https://github.com/aaayd/waze-custom-patches/releases/download/waze-5.24.90.901-1030734-patches-1.13/waze-theme-selector-1.13.1030734.mpp",
-  "page_url": "https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.90.901-1030734-patches-1.13",
-  "description": "Waze 5.24.90.901 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Find resource hooks, settings renderers, config getters and mood hooks by structure instead of obfuscated names. Runtime application lookups, settings methods and config identifiers are rebound to each APK. Badge artwork and controls use resource names instead of fixed IDs. Nightly builds test all eight patches on the latest Waze and both pinned older versions, plus a synthetic rename of eight classes and twenty methods. Ambiguous hooks stop publication. Native icon profiles continue to adapt automatically. Phone and Android Auto runtime testing is still required."
+  "version": "1.14.1030734",
+  "created_at": "2026-10-04T12:18:47",
+  "download_url": "https://github.com/aaayd/waze-custom-patches/releases/download/waze-5.24.90.901-1030734-patches-1.14/waze-theme-selector-1.14.1030734.mpp",
+  "page_url": "https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.24.90.901-1030734-patches-1.14",
+  "description": "Waze 5.24.90.901 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Follow config values across register moves and primitive or boxed boolean reads. Discover mood screens through their call graph, settings methods through their effects, and application context through verified bytecode bridges. Install badge controls after screen resume. Match available icon assets and optional palette entries to the target APK. Native discovery supports compact and textured report tables, with call counts, asset geometry and output verification. Nightly tests cover multiple 2026 layouts, synthetic renaming and rejection cases. January to March inlined native icon sizing remains unsupported. Phone and Android Auto runtime testing is still required."
 }
