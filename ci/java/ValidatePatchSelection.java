@@ -174,6 +174,31 @@ public class ValidatePatchSelection {
             index++;
         }
         require(attach == (auto ? 1 : 0), "Unexpected startup hook count");
+        if (themes || icons) {
+            var prepare = only(methods(classes).stream().filter(m -> strings(m).contains("Resources extraction unnecessary")).toList(), "resource preparation");
+            var reset = only(methods(classes).stream().filter(m -> m.getDefiningClass().equals(prepare.getDefiningClass()) &&
+                m.getParameterTypes().isEmpty() && m.getReturnType().equals("V") && strings(m).contains("version") &&
+                methodCalls(m).stream().anyMatch(c -> c.getDefiningClass().equals("Ljava/io/File;") && c.getName().equals("delete"))).toList(), "resource reset");
+            for (var hook : List.of(prepare, reset)) {
+                var instructions = new ArrayList<Instruction>(); hook.getImplementation().getInstructions().forEach(instructions::add);
+                int count = (themes ? 1 : 0) + (icons ? 1 : 0);
+                for (int i=0;i<instructions.size();i++) if (instructions.get(i).getOpcode() == Opcode.RETURN_VOID) {
+                    require(i >= count, "Unhooked resource completion");
+                    var previous = instructions.subList(i-count,i);
+                    require(previous.stream().anyMatch(ins -> calls(ins, prefix+"ThemeSelector;", "prepare")) == themes, "Theme completion hook missing");
+                    require(previous.stream().anyMatch(ins -> calls(ins, prefix+"IconPack;", "prepare")) == icons, "Icon completion hook missing");
+                }
+            }
+        }
+        if (icons) {
+            var loader = only(methods(classes).stream().filter(m -> methodCalls(m).stream().anyMatch(c ->
+                c.getDefiningClass().equals(prefix+"IconPack;") && c.getName().equals("open"))).toList(), "icon stream hook");
+            require(loader.getParameterTypes().toString().equals("[Ljava/lang/String;]"), "Wrong icon filename signature");
+            var first = loader.getImplementation().getInstructions().iterator().next();
+            require(first instanceof RegisterRangeInstruction && calls(first,prefix+"IconPack;","open") &&
+                ((RegisterRangeInstruction)first).getStartRegister() == loader.getImplementation().getRegisterCount()-1,
+                "Icon hook does not receive filename at method entry");
+        }
         var render = only(methods(classes).stream().filter(m -> m.getReturnType().equals("Landroid/view/View;") &&
             m.getParameterTypes().size() == 1 && strings(m).contains("page") && delegatesToAbstract(m, classes)).toList(), "settings renderer");
         int exits = 0, themeRows = 0, iconRows = 0, autoRows = 0, alertRows = 0;
@@ -247,6 +272,20 @@ public class ValidatePatchSelection {
                 require(HexFormat.of().formatHex(hash).equals("e5d442454418efd4ff438b3ed3f6bfa5a3aee78f52616625cb25ce0ec8855b48"), "Installer checksum mismatch");
             }
             require((zip.getEntry("assets/morphe/iconpacks/paths.txt") != null) == icons, "Icon pack asset selection mismatch");
+            if (icons) {
+                require(zip.getEntry("assets/morphe/compatibility/icon-pack.txt") != null, "Icon compatibility report missing");
+                require(zip.getEntry("assets/morphe/iconpacks/fallback-paths.txt") != null, "Stock fallback manifest missing");
+                String paths = new String(zip.getInputStream(zip.getEntry("assets/morphe/iconpacks/paths.txt")).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                for (String path : paths.split("\\n")) {
+                    var stock = zip.getEntry("assets/res/skins/default/"+path);
+                    var custom = zip.getEntry("assets/morphe/iconpacks/google_maps/"+path);
+                    require(stock != null && custom != null, "Manifest includes unavailable icon: "+path);
+                    var originalImage = javax.imageio.ImageIO.read(zip.getInputStream(stock));
+                    var customImage = javax.imageio.ImageIO.read(zip.getInputStream(custom));
+                    require(originalImage != null && customImage != null && originalImage.getWidth() == customImage.getWidth() &&
+                        originalImage.getHeight() == customImage.getHeight(), "Manifest includes incompatible icon: "+path);
+                }
+            }
             require((zip.getEntry("assets/morphe/themes/oled/skin_values.day.lua") != null) == themes, "Theme asset selection mismatch");
             var manifest = AndroidManifestBlock.load(zip.getInputStream(zip.getEntry("AndroidManifest.xml")));
             require(manifest.getVersionCode() == Math.max(1030752, originalCode + 20), "Manifest version edits did not compose");

@@ -129,7 +129,7 @@ patching requires those resources to exist. JVM fixtures change their numeric ID
 between runs to check that the selector does not cache old IDs. Native queue and
 login APIs used by reflection are checked before injecting the extensions.
 
-The release build also rewrites the pinned 5.24.5.0 fixture with eight renamed
+The release build also rewrites the pinned 5.24.5.0 fixture with nine renamed
 classes and twenty renamed methods, then applies all eight patches and inspects
 the resulting hooks and runtime bindings. A second fixture adds a competing
 resource hook and must be rejected. Only these synthetic fixtures bypass the
@@ -177,3 +177,17 @@ actually exist in the target package; unmatched artwork stays original. Semantic
 fixtures test register moves, normal/range calls, long instruction separation,
 primitive/boxed values, optional palettes and rejection of ambiguous or invalid
 inputs. These checks supplement the real APK builds.
+
+Resource completion matching follows synchronous extraction helpers. Icon loading
+supports direct asset reads and delegated skin streams. The 2023 fixture expects
+seven patches; its inlined native renderer still rejects icon sizing.
+
+Optional icon mismatches produce patch-log warnings and an embedded report shown
+by **Icon pack > Icon warnings**. A separate fallback manifest restores stock
+artwork, including stale overrides from an earlier installation. Missing badge
+artwork hides only that choice. Native groups without an artwork mapping keep
+their original calls; missing or ambiguous structural evidence still fails.
+
+Regression APKs remove an icon, resize another, add an unmapped report icon, and
+remove the recognised artwork schema. Partial changes must rebuild with explicit
+fallbacks; the broken schema must fail. JVM tests also verify stock restoration.

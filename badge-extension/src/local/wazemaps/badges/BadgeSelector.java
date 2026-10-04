@@ -20,8 +20,12 @@ public final class BadgeSelector {
     }
     public static int selection(Context context) {
         int value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("badge", -2);
-        for (int allowed : VALUES) if (value == allowed) return value;
+        for (int allowed : VALUES) if (value == allowed && available(context, value)) return value;
         return -2;
+    }
+    public static boolean available(Context context, int value) {
+        return value == -2 || value == -1 || (value >= 0 && value < DRAWABLES.length &&
+            DRAWABLES[value] != null && resource(context, "drawable", DRAWABLES[value]) != 0);
     }
     public static Drawable drawable(Context context, int value) {
         if (value < 0 || value >= DRAWABLES.length || DRAWABLES[value] == null) return null;
@@ -77,14 +81,20 @@ public final class BadgeSelector {
             preview.setImageDrawable(drawable(activity, selection(activity)));
         };
         update.run();
-        row.setOnClickListener(view -> new AlertDialog.Builder(activity)
-            .setTitle("Badge appearance")
-            .setSingleChoiceItems(LABELS, selectedPosition(activity), (dialog, position) -> {
-                activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("badge", VALUES[position]).apply();
+        row.setOnClickListener(view -> {
+            java.util.List<String> labels = new java.util.ArrayList<>();
+            java.util.List<Integer> values = new java.util.ArrayList<>();
+            for (int i = 0; i < VALUES.length; i++) if (available(activity, VALUES[i])) {
+                labels.add(LABELS[i]); values.add(VALUES[i]);
+            }
+            new AlertDialog.Builder(activity).setTitle("Badge appearance")
+            .setSingleChoiceItems(labels.toArray(new String[0]), values.indexOf(selection(activity)), (dialog, position) -> {
+                activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("badge", values.get(position)).apply();
                 activity.setResult(4);
                 update.run();
                 dialog.dismiss();
-            }).setNegativeButton("Cancel", null).show());
+            }).setNegativeButton("Cancel", null).show();
+        });
 
         RelativeLayout.LayoutParams rowParams = new RelativeLayout.LayoutParams(-1, -2);
         int header = resource(activity, "id", "headerView");

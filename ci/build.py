@@ -154,13 +154,17 @@ def main():
     run(javac, "-cp", settings_cp, "-d", settings_classes, *sorted((ROOT / "ci/settings-fixtures").rglob("*.java")), *sorted((ROOT / "ci/alert-fixtures").rglob("*.java")))
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateSettingsRows")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateBadgeResources")
+    run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateIconFallback")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateAlertDistance")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateCameraSound")
     fixture_inputs = []
     for fixture in json.loads((ROOT / "ci/compatibility_fixtures.json").read_text()):
         if fixture["version"] == version:
             continue
-        fixture_source = ROOT / "downloads" / f"waze-{fixture['version']}-original-arm64.apkm"
+        extension = fixture.get("extension", ".apkm")
+        if extension not in (".apk", ".apkm"):
+            raise ValueError("Unsupported fixture package type")
+        fixture_source = ROOT / "downloads" / f"waze-{fixture['version']}-original-arm64{extension}"
         if not fixture_source.exists():
             fixture_source.parent.mkdir(exist_ok=True)
             if "url" in fixture:
@@ -218,6 +222,8 @@ def main():
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/ValidatePatchSelection.java")
     validation_cp = os.pathsep.join([str(work), str(desktop)])
     run(java, "-cp", validation_cp, "ValidatePatchSelection", unsigned, "true", "true", "true", "true", "true", metadata["version_code"])
+    run(os.sys.executable, ROOT / "ci/icon_compatibility_regression.py", "--input", source, "--bundle", bundle,
+        "--desktop", desktop, "--java", java, "--work", work / "icon-compatibility")
     for name, theme, icons, auto, alerts, camera, filename in [
             ("Selectable map themes", "true", "false", "false", "false", "false", "themes-only"),
             ("Selectable report icon packs", "false", "true", "false", "false", "false", "icons-only"),
@@ -300,7 +306,7 @@ def main():
     shutil.copyfile(source, original)
     metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES, compatible_versions=verified_versions,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
-                    validation="Semantic bytecode and native resource discovery, direct context bridges, data-flow and palette fixtures, eight-class/twenty-method synthetic obfuscation, ambiguity rejection, native ELF and branch validation, January seven-patch and April/July/full pinned regressions, all 256 option combinations, independent feature APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
+                    validation="Semantic bytecode and native resource discovery, direct context bridges, data-flow and palette fixtures, nine-class/twenty-method synthetic obfuscation, ambiguity rejection, native ELF and branch validation, 2023/January seven-patch and April/July/full pinned regressions, missing/mismatched icon fallbacks and schema rejection, all 256 option combinations, independent feature APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (output / "SHA256SUMS.txt").write_text("".join(f"{sha(p)}  {p.name}\n" for p in sorted(output.iterdir()) if p.is_file()))
     print(f"Release ready: {output}")

@@ -51,10 +51,19 @@ class ReportDiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'count disagrees'):
             self.discover(other)
 
-    def test_requires_artwork_mapping_for_new_subtype(self):
+    def test_keeps_unknown_subtype_unchanged_with_warning(self):
         other = copy.deepcopy(self.stream)
         other[2]['name'] = 'bigpin_unreviewed_new_hazard'
-        with self.assertRaisesRegex(ValueError, 'unrecognised report group'):
+        _, _, groups = self.discover(other + self.stream)
+        self.assertEqual(len(groups), 15)
+        self.assertFalse(any(c['name'] == 'bigpin_unreviewed_new_hazard' for group in groups for c in group))
+
+    def test_rejects_unrecognisable_artwork_schema(self):
+        other = copy.deepcopy(self.stream)
+        for call in other:
+            if call and call['name'] and call['name'].startswith('bigpin_'):
+                call['name'] = 'bigpin_unreviewed_new_hazard'
+        with self.assertRaisesRegex(ValueError, 'artwork schema is not recognised'):
             self.discover(other)
 
     def test_rejects_control_flow_inside_group(self):

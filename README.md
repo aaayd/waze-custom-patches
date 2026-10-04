@@ -51,6 +51,10 @@ Traffic, road closures, blocked lanes and stopped-car reports use red icons in
 the Google Maps pack. Enable **Detailed report icons at normal sizes** to keep
 specific report artwork when zooming out.
 
+Missing or incompatible individual icons keep Waze's artwork. Check the patch
+log or **Icon pack > Icon warnings** for details. Missing badge artwork hides only
+that choice. Unrecognisable hooks or a broken icon schema still stop the affected patch.
+
 ## Police alert distance
 
 Enable **Android Auto police alert distance**, then open

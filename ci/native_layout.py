@@ -132,7 +132,7 @@ def verify_builder(renderer, address):
     raise ValueError('Native report layout: vector initializer has no tail call')
 
 
-def discover_layout(renderer, templates, catalog):
+def discover_layout(renderer, templates, catalog, warnings=None):
     streams = [list(calls_in(renderer, start, end)) for start, end in candidate_ranges(renderer, templates)]
     references = collections.defaultdict(list)
     for stream in streams:
@@ -179,7 +179,15 @@ def discover_layout(renderer, templates, catalog):
     known.update(tuple(name for name in group if not name.startswith('map_pins_report_') and 'albedo' not in name) for group in catalog['groups'])
     compact = {tuple(name for name in group if not name.startswith('map_pins_report_') and 'albedo' not in name)
                for group in catalog['groups']}
+    matched = []
     for group in groups:
         names = tuple(call['name'] for call in group)
-        require(names in (compact if stride == 32 else known), 'unrecognised report group: ' + str(names))
-    return constructor, builder, groups
+        if names in (compact if stride == 32 else known):
+            matched.append(group)
+        else:
+            message = 'unmapped report group left unchanged: ' + str(names)
+            if warnings is not None:
+                warnings.append(message)
+            print('WARNING: Native icons: ' + message)
+    require(len(matched) >= 8, 'report artwork schema is not recognised: fewer than 8 mapped groups')
+    return constructor, builder, matched

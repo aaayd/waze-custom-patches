@@ -3,6 +3,11 @@ import java.lang.reflect.Proxy;
 import java.util.*;
 public class Context {
  public final android.content.res.Resources resources=new android.content.res.Resources();
+ public final android.content.res.AssetManager assets=new android.content.res.AssetManager();
+ public java.io.File filesDir;
+ public android.content.res.AssetManager getAssets(){return assets;}
+ public Context getApplicationContext(){return this;}
+ public java.io.File getFilesDir(){return filesDir;}
  public android.content.res.Resources getResources() { return resources; }
  public String getPackageName() { return "com.waze"; }
  public android.graphics.drawable.Drawable getDrawable(int id) { return new android.graphics.drawable.Drawable(id); }

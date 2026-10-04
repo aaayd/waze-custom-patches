@@ -23,7 +23,8 @@ public class MutateBindingFixture {
         "Lcom/waze/config/c;", "Lfixture/obfuscated/NumberConfig;",
         "Lcom/waze/config/b;", "Lfixture/obfuscated/BooleanConfig;",
         "Lcom/waze/config/f;", "Lfixture/obfuscated/Config;",
-        "Lcom/waze/config/h;", "Lfixture/obfuscated/ConfigReader;");
+        "Lcom/waze/config/h;", "Lfixture/obfuscated/ConfigReader;",
+        "Lcom/waze/MoodManager;", "Lfixture/obfuscated/Moods;");
     static final Set<String> seenTypes = new HashSet<>(), seenMethods = new HashSet<>();
     static String rename(MethodReference method) {
         String type = method.getDefiningClass(), name = method.getName();

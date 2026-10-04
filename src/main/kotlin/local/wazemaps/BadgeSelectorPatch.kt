@@ -14,11 +14,12 @@ private val badgeResources = rawResourcePatch {
     dependsOn(refreshWazeSkins)
     execute {
         val table = get("resources.arsc").inputStream().use { TableBlock.load(it) }
-        for ((type, names) in mapOf("drawable" to listOf("crown", "sword", "shield", "edit", "wings"),
-            "id" to listOf("moodList", "headerView"))) {
-            for (name in names) if (table.getResource("com.waze", type, name) == null)
-                throw PatchException("Waze badge resource missing: $type/$name")
-        }
+        for (name in listOf("moodList", "headerView")) if (table.getResource("com.waze", "id", name) == null)
+            throw PatchException("Waze badge screen resource missing: id/$name")
+        val artwork = listOf("crown", "sword", "shield", "edit", "wings")
+        val missing = artwork.filter { table.getResource("com.waze", "drawable", it) == null }
+        if (missing.size == artwork.size) throw PatchException("Waze badge artwork schema is not recognised")
+        missing.forEach { println("WARNING: Badge artwork $it is absent; this choice will be hidden") }
     }
 }
 
@@ -36,16 +37,7 @@ val badgeSelectorPatch = bytecodePatch(
     dependsOn(badgeResources)
     extendWith("extensions/badge-selector.dex")
     execute {
-        val mood = mutableClassDefBy("Lcom/waze/MoodManager;")
-        val badge = mood.methods.singleOrNull {
-            it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;") &&
-            it.returnType == "Landroid/graphics/drawable/Drawable;" &&
-            ("_ui.png" in it.strings() || it.strings().containsAll(listOf("_ui", ".png"))) &&
-            it.calls().any { ref -> ref.parameterTypes.map(CharSequence::toString) ==
-                listOf("Landroid/content/res/Resources;", "Ljava/lang/String;") &&
-                ref.returnType == "Landroid/graphics/drawable/Drawable;" } &&
-            it.calls().any { ref -> ref.definingClass == "Ljava/lang/Integer;" && ref.name == "intValue" } }
-            ?: throw PatchException("Expected Waze badge renderer")
+        val badge = findMethod("badge renderer", ::isBadgeRenderer)
         val create = moodScreen()
         val resume = mutableClassDefBy(create.definingClass).methods.singleOrNull {
             it.name == "onResume" && it.parameters() && it.returnType == "V"

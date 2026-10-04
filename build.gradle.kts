@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 plugins { kotlin("jvm") version "2.4.10" }
 group = "local.wazemaps"
 version = "2.0.0"
-val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.14.0")
+val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.15.0")
 val wazeVersion = providers.gradleProperty("wazeVersion").orElse("5.24.90.901")
 val generatedTarget = layout.buildDirectory.dir("generated/waze-target")
 val generateTarget by tasks.registering {

@@ -37,12 +37,29 @@ internal fun BytecodePatchContext.resourceHooks(): List<MutableMethod> {
     val owner = mutableClassDefBy(prepare.definingClass)
     val extraction = owner.methods.filter { "assets/res/skins" in it.strings() && it.parameters("Z") && it.returnType == "V" }
         .toList().unique("skin extraction")
-    if (prepare.calls().none { it == extraction }) throw PatchException("Skin preparation no longer invokes extraction")
+    if (!reachesResourceExtraction(prepare, extraction, owner.methods.toList()))
+        throw PatchException("Skin preparation no longer reaches synchronous extraction")
     val reset = owner.methods.filter { method ->
-        method.parameters() && method.returnType == "V" && method.calls().any { it == extraction } &&
+        method.parameters() && method.returnType == "V" && reachesResourceExtraction(method, extraction, owner.methods.toList()) &&
             method.calls().any { it.definingClass == "Ljava/io/File;" && it.name == "delete" } && "version" in method.strings()
     }.toList().unique("resource reset")
     return listOf(prepare, reset)
+}
+
+/** Only synchronous static calls in the resource owner may bridge extraction. */
+internal fun reachesResourceExtraction(start: Method, extraction: Method, methods: List<Method>): Boolean {
+    val visited = mutableSetOf<Method>()
+    fun reaches(method: Method): Boolean {
+        if (method == extraction) return true
+        if (!visited.add(method)) return false
+        return method.code().any { instruction ->
+            if (instruction.opcode !in setOf(Opcode.INVOKE_STATIC, Opcode.INVOKE_STATIC_RANGE)) return@any false
+            val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            methods.singleOrNull { it == ref && it.definingClass == start.definingClass && it.parameters("Z") &&
+                it.returnType == "V" && AccessFlags.STATIC.isSet(it.accessFlags) }?.let(::reaches) == true
+        }
+    }
+    return reaches(start)
 }
 
 internal fun BytecodePatchContext.settingsRenderer(): MutableMethod = findMethod("settings row renderer") { method ->
@@ -55,12 +72,39 @@ internal fun BytecodePatchContext.settingsRenderer(): MutableMethod = findMethod
         }
 }
 
-internal fun BytecodePatchContext.assetLoader(): MutableMethod = findMethod("skin asset stream") {
-    it.parameters("Ljava/lang/String;") && it.returnType == "Ljava/io/InputStream;" &&
-        "res/skins/default/" in it.strings() && it.calls().any { ref ->
-            ref.definingClass == "Landroid/content/res/AssetManager;" && ref.name == "open"
-        }
+internal fun reachesAssetOpen(start: Method, methods: List<Method>): Boolean {
+    val visited = mutableSetOf<Method>()
+    fun reaches(method: Method): Boolean = visited.add(method) && method.calls().any { ref ->
+        (ref.definingClass == "Landroid/content/res/AssetManager;" && ref.name == "open" && ref.returnType == "Ljava/io/InputStream;") ||
+            methods.singleOrNull { it == ref && it.definingClass == start.definingClass && it.returnType == "Ljava/io/InputStream;" }
+                ?.let(::reaches) == true
+    }
+    return reaches(start)
 }
+
+internal fun isSkinAssetLoader(method: Method, methods: List<Method>): Boolean =
+    method.parameters("Ljava/lang/String;") && method.returnType == "Ljava/io/InputStream;" &&
+        "res/skins/default/" in method.strings() &&
+        // The skin filename is forwarded unchanged. Encoded-path loaders prepend a directory.
+        (method.calls().any { it.definingClass == "Landroid/content/res/AssetManager;" && it.name == "open" } ||
+            method.calls().none { it.definingClass in setOf("Ljava/lang/StringBuilder;", "Ljava/lang/String;") &&
+                it.name in setOf("append", "concat", "format") }) &&
+        reachesAssetOpen(method, methods)
+
+internal fun BytecodePatchContext.assetLoader(): MutableMethod = findMethod("skin asset stream") { method ->
+    method.parameters("Ljava/lang/String;") && method.returnType == "Ljava/io/InputStream;" &&
+        "res/skins/default/" in method.strings() && isSkinAssetLoader(method, classDefBy(method.definingClass).methods.toList())
+}
+
+internal fun isBadgeRenderer(method: Method): Boolean =
+    method.parameters("Landroid/content/Context;") && method.returnType == "Landroid/graphics/drawable/Drawable;" &&
+        !AccessFlags.STATIC.isSet(method.accessFlags) &&
+        ("_ui.png" in method.strings() || method.strings().containsAll(listOf("_ui", ".png"))) &&
+        method.calls().any { ref -> ref.returnType == "Landroid/graphics/drawable/Drawable;" &&
+            ref.parameterTypes.map(CharSequence::toString) in listOf(listOf("Ljava/lang/String;"),
+                listOf("Landroid/content/res/Resources;", "Ljava/lang/String;"),
+                listOf("Ljava/lang/String;", "Landroid/content/res/Resources;")) } &&
+        method.calls().any { it.definingClass == "Ljava/lang/Integer;" && it.name == "intValue" }
 
 internal fun BytecodePatchContext.isSubtype(type: String, parent: String): Boolean =
     generateSequence(type) { classDefByOrNull(it)?.superclass }.any { it == parent }

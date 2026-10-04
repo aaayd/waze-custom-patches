@@ -28,6 +28,7 @@ public final class IconPack {
     private static final String ROOT = "morphe/iconpacks/";
     private static volatile Context application;
     private static volatile Set<String> paths;
+    private static Set<String> fallbackPaths;
     private static volatile boolean google;
 
     private static boolean selected(Context context) {
@@ -50,8 +51,18 @@ public final class IconPack {
             }
         }
         if (entries.isEmpty()) throw new IOException("Empty icon pack");
+        Set<String> fallback = new LinkedHashSet<>();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(context.getAssets().open(ROOT + "fallback-paths.txt"), "UTF-8"))) {
+            String path;
+            while ((path = reader.readLine()) != null) {
+                if (path.isEmpty()) continue;
+                if (path.contains("..") || path.startsWith("/") || path.contains("\\") || !path.endsWith(".png") ||
+                        entries.contains(path) || !fallback.add(path)) throw new IOException("Invalid fallback icon path");
+            }
+        }
         application = context.getApplicationContext();
         google = selected(context);
+        fallbackPaths = Collections.unmodifiableSet(fallback);
         paths = Collections.unmodifiableSet(entries);
     }
 
@@ -140,15 +151,18 @@ public final class IconPack {
         File root = new File(context.getFilesDir().getParentFile(), "waze/skins/default");
         List<File> targets = new ArrayList<>();
         List<byte[]> before = new ArrayList<>(), after = new ArrayList<>();
-        for (String path : paths) {
-            String asset = (useGoogle ? ROOT + "google_maps/" : "res/skins/default/") + path;
+        Set<String> allPaths = new LinkedHashSet<>(paths);
+        allPaths.addAll(fallbackPaths);
+        for (String path : allPaths) {
+            boolean override = useGoogle && paths.contains(path);
+            String asset = (override ? ROOT + "google_maps/" : "res/skins/default/") + path;
             byte[] bytes;
             try (InputStream input = context.getAssets().open(asset); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[8192]; int n;
                 while ((n = input.read(buffer)) != -1) output.write(buffer, 0, n);
                 bytes = output.toByteArray();
             }
-            if (bytes.length < 24 || bytes[0] != (byte)137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71)
+            if (override && (bytes.length < 24 || bytes[0] != (byte)137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71))
                 throw new IOException("Invalid PNG: " + path);
             File file = new File(root, path);
             targets.add(file);
@@ -173,10 +187,23 @@ public final class IconPack {
 
     public static void show(Context context) {
         boolean[] draft = {selected(context)};
-        AlertDialog dialog = new AlertDialog.Builder(context).setTitle("Icon pack")
+        AlertDialog.Builder builder = new AlertDialog.Builder(context).setTitle("Icon pack")
                 .setSingleChoiceItems(new String[]{"Waze original", "Google Maps"}, draft[0] ? 1 : 0,
                         (choice, which) -> draft[0] = which == 1)
-                .setNegativeButton("Cancel", null).setPositiveButton("Apply & restart", null).create();
+                .setNegativeButton("Cancel", null).setPositiveButton("Apply & restart", null);
+        try (InputStream input = context.getAssets().open("morphe/compatibility/icon-pack.txt");
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192]; int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            String warnings = new String(output.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            if (!warnings.isEmpty()) builder.setNeutralButton("Icon warnings", (choice, which) ->
+                new AlertDialog.Builder(context).setTitle("Icon compatibility")
+                    .setMessage("Some icons are unavailable or keep Waze's artwork.\n\n" + warnings)
+                    .setPositiveButton("OK", null).show());
+        } catch (IOException error) {
+            Log.w(TAG, "Could not read icon compatibility report", error);
+        }
+        AlertDialog dialog = builder.create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
             apply(context, draft[0], dialog);

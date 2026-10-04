@@ -36,11 +36,11 @@ val driverIconsPatch = bytecodePatch(
     ))
     dependsOn(refreshWazeSkins)
     execute {
-        val manager = mutableClassDefBy("Lcom/waze/MoodManager;")
-        val canSet = manager.methods.singleOrNull {
+        val canSet = findMethod("mood eligibility") {
             it.returnType == "Z" && it.parameters("Landroid/content/Context;", "Ljava/lang/String;") &&
                 it.strings().containsAll(listOf("wazer_dino", "wazer_8bit", "wazer_robot"))
-        } ?: throw PatchException("Expected Waze mood eligibility method")
+        }
+        val manager = mutableClassDefBy(canSet.definingClass)
         val babyRef = canSet.calls().singleOrNull { it.definingClass == manager.type && it.returnType == "Z" && it.parameterTypes.isEmpty() }
             ?: throw PatchException("Expected one baby-mood eligibility call")
         val baby = manager.methods.singleOrNull { it == babyRef }

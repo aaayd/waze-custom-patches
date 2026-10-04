@@ -1,6 +1,32 @@
 package local.wazemaps
 
 import app.morphe.patcher.patch.*
+import java.nio.ByteBuffer
+
+/** A bad optional image is omitted from both the runtime manifest and overrides. */
+internal fun reportIconMismatch(original: ByteArray?, replacement: ByteArray?): String? {
+    if (original == null) return "not present in this Waze version"
+    if (replacement == null) return "replacement missing; keeping Waze artwork"
+    fun size(bytes: ByteArray): Pair<Int, Int>? {
+        val signature = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10)
+        if (bytes.size < 33 || !bytes.copyOfRange(0, 8).contentEquals(signature) ||
+            String(bytes, 12, 4, Charsets.US_ASCII) != "IHDR" || ByteBuffer.wrap(bytes).getInt(8) != 13) return null
+        val data = ByteBuffer.wrap(bytes)
+        val width = data.getInt(16); val height = data.getInt(20)
+        return if (width in 1..4096 && height in 1..4096) width to height else null
+    }
+    val source = size(original) ?: return "unrecognised Waze PNG; keeping Waze artwork"
+    val target = size(replacement) ?: return "invalid replacement PNG; keeping Waze artwork"
+    return if (source == target) null else "canvas mismatch: Waze ${source.first}x${source.second}, pack ${target.first}x${target.second}; keeping Waze artwork"
+}
+
+internal fun validateReportIconCoverage(paths: List<String>) {
+    val originals = paths.filterNot { it.startsWith("morphe_") }
+    val families = listOf("police", "camera", "accident", "hazard", "closure", "traffic")
+        .count { family -> originals.any { family in it } }
+    if (originals.size < 20 || families < 3)
+        throw PatchException("Waze report artwork schema is not recognised: ${originals.size} compatible assets across $families report families")
+}
 
 private object ReportIconAssets
 

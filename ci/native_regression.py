@@ -61,9 +61,9 @@ def main():
     try:
         verify_assets(archive.getvalue())
     except ValueError as error:
-        require('geometry or texture changed' in str(error), 'unexpected asset failure')
+        require('template family missing' in str(error), 'unexpected asset failure')
     else:
-        raise AssertionError('Accepted changed icon geometry')
+        raise AssertionError('Accepted an entirely missing icon template family')
     print('PASS native discovery: real report mappings, output disassembly and ELF mapping; rejects changed helpers, missing calls and wrong architecture; accepts unrelated metadata changes and unused helper duplicates')
 
 

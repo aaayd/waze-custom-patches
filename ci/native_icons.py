@@ -139,7 +139,8 @@ def branch(source, target, link=False):
 def discover(data):
     renderer = Renderer(data)
     from native_layout import discover_layout
-    constructor, builder, groups = discover_layout(renderer, TEMPLATES, json.loads(CATALOG.read_text()))
+    warnings = []
+    constructor, builder, groups = discover_layout(renderer, TEMPLATES, json.loads(CATALOG.read_text()), warnings)
     catalog = json.loads(CATALOG.read_text())
     replacements = []
     aliases = {}
@@ -213,7 +214,7 @@ def discover(data):
             'output_size': len(result), 'storage': 'existing-padding' if appended is None else 'appended-rx-segment',
             'append': (appended or b'').hex(), 'constructor': constructor, 'builder': builder,
             'groups': len(groups), 'call_sites': len(replacements), 'aliases': len(aliases), 'pool_size': pool_size,
-            'pool_offset': cave, 'pool_address': cave_address, 'patches': patches}
+            'pool_offset': cave, 'pool_address': cave_address, 'patches': patches, 'warnings': warnings}
 
 
 def validate_output(original, result, constructor, replacements, stubs):
@@ -250,17 +251,30 @@ def validate_output(original, result, constructor, replacements, stubs):
 
 def verify_assets(base):
     catalog = json.loads(CATALOG.read_text())
+    warnings = []
+    readable = set()
     with zipfile.ZipFile(io.BytesIO(base)) as archive:
         names = set(archive.namelist())
         for name, expected in catalog['templates'].items():
             if 'assets/res/skins/default/' + name not in names:
+                warnings.append('optional icon template absent: ' + name)
                 continue
-            with Image.open(io.BytesIO(archive.read('assets/res/skins/default/' + name))) as image:
-                image = image.convert('RGBA')
-                require(list(image.size) == expected['size'] and hashlib.sha256(image.tobytes()).hexdigest() == expected['rgba_sha256'],
-                        'icon template geometry or texture changed: ' + name)
+            try:
+                with Image.open(io.BytesIO(archive.read('assets/res/skins/default/' + name))) as image:
+                    image = image.convert('RGBA')
+                    readable.add(name)
+                    if list(image.size) != expected['size']:
+                        warnings.append('icon template canvas changed; sized aliases retain their bundled dimensions: ' + name)
+                    elif hashlib.sha256(image.tobytes()).hexdigest() != expected['rgba_sha256']:
+                        warnings.append('icon template artwork changed; sized aliases retain their bundled artwork: ' + name)
+            except (OSError, ValueError):
+                warnings.append('unreadable icon template; sized aliases use bundled artwork: ' + name)
         for stem in ('tinypin_hazard', 'smallpin_hazard'):
-            require('assets/res/skins/default/' + stem + '.png' in names, 'base icon template missing: ' + stem)
+            require(any(name == stem + '.png' or name.startswith(stem + '@') for name in readable),
+                    'icon template family missing or unreadable: ' + stem)
+    for message in warnings:
+        print('WARNING: Native icons: ' + message)
+    return warnings
 
 
 def properties(report):
@@ -274,8 +288,9 @@ def properties(report):
 
 def prepare_profile(source, output_root, report_path):
     data, base = read_package(source)
-    verify_assets(base)
+    asset_warnings = verify_assets(base)
     report = discover(data)
+    report['warnings'].extend(asset_warnings)
     filename = report['source_sha256'] + '.properties'
     cached = ROOT / 'src/main/resources/themes/native-profiles' / filename
     generated = Path(output_root) / 'themes/native-profiles' / filename
@@ -309,8 +324,9 @@ def main():
         report = prepare_profile(args.input, args.resource_root, args.report)
     else:
         data, base = read_package(args.input)
-        verify_assets(base)
+        asset_warnings = verify_assets(base)
         report = discover(data)
+        report['warnings'].extend(asset_warnings)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(properties(report))
         args.report.parent.mkdir(parents=True, exist_ok=True)

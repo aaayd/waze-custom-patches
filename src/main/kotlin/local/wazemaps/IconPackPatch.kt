@@ -3,6 +3,7 @@ package local.wazemaps
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.*
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 
 private object IconPackResources
@@ -13,23 +14,48 @@ private val selectableIconAssets = rawResourcePatch {
         val paths = IconPackResources::class.java.getResourceAsStream("/iconpacks/paths.txt")
             ?.bufferedReader()?.use { it.readText() } ?: throw PatchException("Missing icon pack manifest")
         val selected = mutableListOf<String>()
-        for (path in paths.lineSequence().filter(String::isNotEmpty)) {
+        val warnings = mutableListOf<String>()
+        val fallback = mutableListOf<String>()
+        val expected = paths.lineSequence().filter(String::isNotEmpty).toList()
+        if (expected.isEmpty() || expected.distinct().size != expected.size) throw PatchException("Invalid icon pack manifest")
+        for (path in expected) {
             if (path.contains("..") || path.startsWith('/') || path.contains('\\') || !path.endsWith(".png"))
                 throw PatchException("Invalid icon asset path: $path")
-            if (!get("assets/res/skins/default/$path").isFile) continue
+            val original = get("assets/res/skins/default/$path").takeIf { it.isFile }?.readBytes()
             val bytes = IconPackResources::class.java.getResourceAsStream("/iconpacks/google_maps/$path")
-                ?.use { it.readBytes() } ?: throw PatchException("Missing Google Maps icon: $path")
+                ?.use { it.readBytes() }
+            val mismatch = reportIconMismatch(original, bytes)
+            if (mismatch != null) {
+                warnings.add("$path: $mismatch")
+                if (original != null) fallback.add(path)
+                continue
+            }
             val target = get("assets/morphe/iconpacks/google_maps/$path")
             target.parentFile.mkdirs()
-            target.writeBytes(bytes)
+            target.writeBytes(bytes!!)
             selected.add(path)
         }
         val originals = selected.filterNot { it.startsWith("morphe_") }
-        if (originals.size < 20 || originals.none { "police" in it } || originals.none { "camera" in it })
-            throw PatchException("Waze report artwork schema is not recognised")
+        validateReportIconCoverage(selected)
+        val skin = get("assets/res/skins/default")
+        val known = expected.toSet()
+        skin.walkTopDown().filter { it.isFile && it.extension == "png" }.forEach { file ->
+            val path = file.relativeTo(skin).invariantSeparatorsPath
+            if (path !in known && (path.startsWith("alert_icons/") ||
+                    Regex("(?:tiny|small|big)pin_(?:police|camera|accident|hazard|closure|traffic).*\\.png").matches(path)))
+            {
+                warnings.add("$path: no pack mapping; keeping Waze artwork")
+                fallback.add(path)
+            }
+        }
+        val report = get("assets/morphe/compatibility/icon-pack.txt")
+        report.parentFile.mkdirs()
+        report.writeText(warnings.joinToString("\n"))
+        warnings.forEach { println("WARNING: Icon pack: $it") }
         val index = get("assets/morphe/iconpacks/paths.txt")
         index.parentFile.mkdirs()
         index.writeText(selected.joinToString("\n", postfix = "\n"))
+        get("assets/morphe/iconpacks/fallback-paths.txt").writeText(fallback.joinToString("\n"))
         println("Waze icon pack: ${originals.size} original assets and ${selected.size - originals.size} sized aliases")
     }
 }
@@ -50,10 +76,12 @@ val iconPackPatch = bytecodePatch(
     execute {
         bindExtension("Llocal/wazemaps/themes/IconPack;", context = true, rows = true)
         val assets = assetLoader()
-        if (assets.implementation!!.registerCount < 3)
+        val filename = if (AccessFlags.STATIC.isSet(assets.accessFlags)) "p0" else "p1"
+        val parameters = if (filename == "p0") 1 else 2
+        if (assets.implementation!!.registerCount <= parameters)
             throw PatchException("Unexpected icon asset loader register layout")
         assets.addInstructions(0, """
-            invoke-static/range {p1 .. p1}, Llocal/wazemaps/themes/IconPack;->open(Ljava/lang/String;)Ljava/io/InputStream;
+            invoke-static/range {$filename .. $filename}, Llocal/wazemaps/themes/IconPack;->open(Ljava/lang/String;)Ljava/io/InputStream;
             move-result-object v0
             if-eqz v0, :original
             return-object v0
