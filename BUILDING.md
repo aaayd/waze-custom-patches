@@ -85,8 +85,10 @@ allows a local original package, but its actual version and certificate must mat
 `build/upstream.json`. Patch target/version metadata is generated at build time;
 source files are not rewritten by the nightly job.
 
-`ci/native_icons.py` discovers the renderer helpers by instruction fingerprints,
-uses the ELF unwind table to bound analysis, and follows resource-string arguments.
+`ci/native_icons.py` and `ci/native_layout.py` locate report tables through resource
+string references, bound analysis with the ELF unwind table, and trace constructor
+arguments. They verify the vector builder and report counts without requiring
+fixed helper instruction bytes. Compact and textured table layouts are supported.
 It verifies every report group against `ci/native_icon_catalog.json`, including
 original image geometry and pixels. It computes branch targets and either uses
 unused executable-segment tail space or appends a separate aligned RX segment
@@ -99,8 +101,13 @@ Morphe only applies a matching profile, checks every original instruction, and
 verifies the complete output hash before writing the renderer. Python, Capstone
 and ELF analysis run on the build host, not the phone.
 
-`ci/compatibility_fixtures.json` pins the older original packages. Every release
-also rebuilds those versions with all eight patches without forcing compatibility.
+`ci/compatibility_fixtures.json` pins older original packages from several compiler
+and renderer generations. Their native profiles are generated before packaging
+the bundle. Full-support fixtures rebuild all eight patches without forcing
+compatibility. The January fixture separately requires seven successful patches
+and rejection of its unsupported inlined native layout. Only that diagnostic
+build bypasses the version list, after original signatures and hashes are checked;
+it is never published as an installable release.
 Changed helpers, missing constructor calls, ambiguous matches, incorrect image
 geometry and unexpected architectures are rejected. A successful build does not
 prove runtime compatibility. The 5.24.0.2 renderer requires the appended-segment
@@ -109,9 +116,12 @@ fallback; that path has structural checks but still needs a device test.
 `WazeBindings.kt` finds bytecode hooks using string anchors, signatures, call
 relationships and field types. Resource preparation/reset, settings rendering,
 config getters, mood eligibility and badge rendering do not depend on obfuscated
-class or method names. Selected extensions have their application resolver,
-settings setters and config identifier reflection literals rebound to the actual
-APK. The native config read supplies the identifier getter; it is not guessed
+class or method names. Selected extensions get a verified direct bytecode bridge to the actual
+application provider. Settings setters and config identifier reflection literals
+are rebound to the APK. Setters may return void or the view; delegated layout
+inflation is traced through helper methods. Mood lookup follows the screen call
+graph, and beta gates follow the config value across register moves and primitive
+or boxed boolean reads. The badge UI is added after superclass screen resume. The native config read supplies the identifier getter; it is not guessed
 from an arbitrary integer field. Android lifecycle, XML custom view and JNI API
 contracts remain explicit boundaries.
 The badge selector resolves artwork and layout controls by resource name, and
@@ -159,3 +169,11 @@ The camera-sound extension has its own JVM native API fixtures for startup,
 config refresh, failed writes, read-back mismatch and unrelated settings.
 It writes only the speed-camera-below-limit setting and reads it back directly.
 Real camera audio is not exercised by CI.
+
+Theme generation parses balanced Lua tables, requires recognised core colours,
+and skips absent optional entries with diagnostics. A present but malformed or
+duplicate colour is rejected. The selectable icon manifest contains assets that
+actually exist in the target package; unmatched artwork stays original. Semantic
+fixtures test register moves, normal/range calls, long instruction separation,
+primitive/boxed values, optional palettes and rejection of ambiguous or invalid
+inputs. These checks supplement the real APK builds.

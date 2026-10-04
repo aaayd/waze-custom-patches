@@ -12,19 +12,25 @@ private val selectableIconAssets = rawResourcePatch {
     execute {
         val paths = IconPackResources::class.java.getResourceAsStream("/iconpacks/paths.txt")
             ?.bufferedReader()?.use { it.readText() } ?: throw PatchException("Missing icon pack manifest")
-        val index = get("assets/morphe/iconpacks/paths.txt")
-        index.parentFile.mkdirs()
-        index.writeText(paths)
+        val selected = mutableListOf<String>()
         for (path in paths.lineSequence().filter(String::isNotEmpty)) {
             if (path.contains("..") || path.startsWith('/') || path.contains('\\') || !path.endsWith(".png"))
                 throw PatchException("Invalid icon asset path: $path")
+            if (!get("assets/res/skins/default/$path").isFile) continue
             val bytes = IconPackResources::class.java.getResourceAsStream("/iconpacks/google_maps/$path")
                 ?.use { it.readBytes() } ?: throw PatchException("Missing Google Maps icon: $path")
-            if (!get("assets/res/skins/default/$path").isFile) throw PatchException("Missing Waze icon: $path")
             val target = get("assets/morphe/iconpacks/google_maps/$path")
             target.parentFile.mkdirs()
             target.writeBytes(bytes)
+            selected.add(path)
         }
+        val originals = selected.filterNot { it.startsWith("morphe_") }
+        if (originals.size < 20 || originals.none { "police" in it } || originals.none { "camera" in it })
+            throw PatchException("Waze report artwork schema is not recognised")
+        val index = get("assets/morphe/iconpacks/paths.txt")
+        index.parentFile.mkdirs()
+        index.writeText(selected.joinToString("\n", postfix = "\n"))
+        println("Waze icon pack: ${originals.size} original assets and ${selected.size - originals.size} sized aliases")
     }
 }
 

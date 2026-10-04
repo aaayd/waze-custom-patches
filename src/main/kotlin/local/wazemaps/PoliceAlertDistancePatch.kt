@@ -34,8 +34,7 @@ val policeAlertDistancePatch = bytecodePatch(
             Triple("setConfigValueLongNTV", listOf("I", "J"), "V")
         )) if (manager.methods.count { it.name == name && it.parameterTypes.map(CharSequence::toString) == parameters && it.returnType == result } != 1)
             throw PatchException("Native distance config API missing: $name")
-        val sync = manager.methods.singleOrNull { it.name == "onConfigSyncedFromServer" && it.parameterTypes.isEmpty() && it.returnType == "V" }
-            ?: throw PatchException("Waze config refresh callback missing")
+        val sync = configSynced()
         val native = mutableClassDefBy("Lcom/waze/NativeManager;")
         val start = native.methods.singleOrNull { it.name == "onlineInit" && it.parameterTypes.isEmpty() && it.returnType == "V" }
             ?: throw PatchException("Waze native startup missing")

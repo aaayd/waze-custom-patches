@@ -66,28 +66,16 @@ val driverIconsPatch = bytecodePatch(
         }
         if (catalogueCalls.size != 2) throw PatchException("Expected two mood catalogue filters")
 
-        val create = moodScreen()
-        val instructions = create.implementation!!.instructions.toList()
-        val betaField = instructions.indices.singleOrNull { index ->
-            ((instructions[index] as? ReferenceInstruction)?.reference as? FieldReference)?.name == "CONFIG_VALUE_MOODS_BETA_ENABLED"
-        } ?: throw PatchException("Expected exactly one beta-mood visibility gate")
-        val betaValue = (betaField + 1 until minOf(betaField + 8, instructions.size)).singleOrNull { index ->
-            val ref = (instructions[index] as? ReferenceInstruction)?.reference as? MethodReference
-            ref?.definingClass == "Ljava/lang/Boolean;" && ref.name == "booleanValue"
-        } ?: throw PatchException("Expected beta-mood Boolean result")
-        val result = instructions[betaValue + 1]
-        val betaRegister = (result as? OneRegisterInstruction)?.registerA
-            ?: throw PatchException("Beta-mood result has no register: ${result.opcode}. Select the original Waze APK.")
-        val alreadyUnlocked = result.isMoodConstant(betaRegister, 1)
-        if (result.opcode != Opcode.MOVE_RESULT && !alreadyUnlocked)
-            throw PatchException("Expected beta-mood result or an already-unlocked constant; found ${result.opcode}. Select the original Waze APK from the release.")
+        moodScreen()
+        val create = moodGate()
+        val (betaResult, betaRegister) = booleanConfigResult(create, "CONFIG_VALUE_MOODS_BETA_ENABLED")
 
         // All fingerprints validated before changing code. Only cosmetic gates are changed.
         if (!hasMoodReturn(canSet.implementation!!.instructions.toList(), 1))
             canSet.addInstructions(0, "const/4 v0, 0x1\nreturn v0")
         if (!hasMoodReturn(baby.implementation!!.instructions.toList(), 0))
             baby.addInstructions(0, "const/4 v0, 0x0\nreturn v0")
-        if (!alreadyUnlocked) create.replaceInstruction(betaValue + 1, "const/16 v$betaRegister, 0x1")
+        create.replaceInstruction(betaResult, "const/16 v$betaRegister, 0x1")
         // Native first parameter includes special/hidden entries; the second controls sorting.
         catalogueCalls.sortedByDescending { it.first }.forEach { (index, register) ->
             if (index == 0 || !refreshInstructions[index - 1].isMoodConstant(register, 1))

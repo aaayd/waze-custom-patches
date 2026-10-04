@@ -21,6 +21,10 @@ import java.util.Arrays;
 
 /** Separate theme sources and independent day/night choices, applied on restart. */
 public final class ThemeSelector {
+    private static Context application() throws Exception {
+        return (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+    }
+
     private static final String TAG = "MorpheThemes";
     private static final String PREFS = "morphe_map_themes";
     private static final String[] IDS = {"waze", "google_v2", "oled"};
@@ -43,8 +47,7 @@ public final class ThemeSelector {
     /** Runs after Waze's resource preparation, before the native renderer starts. */
     public static void prepare() {
         try {
-            Context context = (Context) Class.forName("k.z").getMethod("j", Class.class)
-                    .invoke(null, Application.class);
+            Context context = application();
             installFiles(context, selected(context, "day"), selected(context, "night"));
             Log.i(TAG, "Map themes prepared: light=" + selected(context, "day") + ", dark=" + selected(context, "night"));
         } catch (Exception error) {

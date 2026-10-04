@@ -3,18 +3,24 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 plugins { kotlin("jvm") version "2.4.10" }
 group = "local.wazemaps"
 version = "2.0.0"
-val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.13.0")
+val bundleVersion = providers.gradleProperty("bundleVersion").orElse("1.14.0")
 val wazeVersion = providers.gradleProperty("wazeVersion").orElse("5.24.90.901")
 val generatedTarget = layout.buildDirectory.dir("generated/waze-target")
 val generateTarget by tasks.registering {
     inputs.property("wazeVersion", wazeVersion)
+    inputs.file("ci/compatibility_fixtures.json")
     outputs.dir(generatedTarget)
     doLast {
         val target = wazeVersion.get()
         require(target.matches(Regex("[0-9]+(\\.[0-9]+){3}"))) { "Invalid Waze version" }
+        @Suppress("UNCHECKED_CAST")
+        val fixtures = groovy.json.JsonSlurper().parse(file("ci/compatibility_fixtures.json")) as List<Map<String, Any>>
+        val supported = (listOf(target) + fixtures.filter { "unsupported_patches" !in it }.map { it.getValue("version") as String }).distinct()
+        require(supported.all { it.matches(Regex("[0-9]+(\\.[0-9]+){3}")) }) { "Invalid fixture version" }
+        val versions = supported.joinToString(", ") { "\"$it\"" }
         generatedTarget.get().file("local/wazemaps/BuildTarget.kt").asFile.apply {
             parentFile.mkdirs()
-            writeText("package local.wazemaps\ninternal const val TARGET_WAZE_VERSION = \"$target\"\ninternal val TESTED_WAZE_VERSIONS = listOf(TARGET_WAZE_VERSION, \"5.24.5.0\", \"5.24.0.2\").distinct()\n")
+            writeText("package local.wazemaps\ninternal const val TARGET_WAZE_VERSION = \"$target\"\ninternal val TESTED_WAZE_VERSIONS = listOf($versions)\n")
         }
     }
 }

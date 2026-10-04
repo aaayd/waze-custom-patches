@@ -18,6 +18,10 @@ import java.util.Arrays;
 
 /** Configurable Android Auto heads-up distances, using Waze's own native config API. */
 public final class AlertDistance {
+    private static Context application() throws Exception {
+        return (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+    }
+
     static final int DEFAULT = 1200, MIN = 50, MAX = 10000;
     private static final String PREFS = "morphe_aa_alert_distance";
     private static final String TAG = "MorpheAlertDistance";
@@ -30,7 +34,7 @@ public final class AlertDistance {
     private static volatile Object[] configObjects;
 
     private static Context context() throws Exception {
-        return (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+        return application();
     }
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);

@@ -1,6 +1,5 @@
 """Discover and verify ARM64 report-icon call sites before packaging a Morphe profile."""
 import argparse
-import bisect
 import hashlib
 import io
 import json
@@ -16,9 +15,6 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "ci/native_icon_catalog.json"
-CONSTRUCTOR = re.compile(re.escape(bytes.fromhex("fe4fbfa9f30300aa")) + b".{4}" +
-                         re.escape(bytes.fromhex("2800805268620039fe4fc1a8c0035fd6")), re.DOTALL)
-GROUP = re.compile(re.escape(bytes.fromhex("0809805200e4006f4204089b08f0a752082000b9000000ad")) + b".{4}", re.DOTALL)
 TEMPLATES = {"tinypin_hazard": "tiny", "smallpin_hazard": "small", "map_pins_report_medium_small_hazard": "tex"}
 
 
@@ -142,88 +138,13 @@ def branch(source, target, link=False):
 
 def discover(data):
     renderer = Renderer(data)
-    constructors = {renderer.address + m.start() for m in CONSTRUCTOR.finditer(renderer.code) if m.start() % 4 == 0}
-    builders = {renderer.address + m.start() for m in GROUP.finditer(renderer.code) if m.start() % 4 == 0}
-    require(constructors and len(builders) == 1, "renderer helper fingerprints missing or ambiguous")
-    builder = next(iter(builders))
-    calls = {target: [] for target in constructors | builders}
-    for i, (word,) in enumerate(struct.iter_unpack('<I', renderer.code)):
-        if word >> 26 != 0b100101:
-            continue
-        immediate = word & 0x3ffffff
-        if immediate & (1 << 25):
-            immediate -= 1 << 26
-        address = renderer.address + i * 4
-        target = address + immediate * 4
-        if target in calls:
-            calls[target].append(address)
-    starts = renderer.functions()
-
-    def bounds(address):
-        i = bisect.bisect_right(starts, address) - 1
-        require(0 <= i < len(starts) - 1, "call outside known function boundaries")
-        return starts[i], starts[i + 1]
-
-    ranges = {bounds(address) for address in calls[builder]}
-    require(0 < len(ranges) <= 16, "unexpected report initializer layout")
-    candidates = [target for target in constructors if sum(any(a <= c < b for a, b in ranges) for c in calls[target]) >= 4]
-    require(len(candidates) == 1, "ambiguous report string constructor")
-    constructor = candidates[0]
-    require(struct.unpack_from('<I', data, renderer.offset(constructor + 8, 4))[0] >> 26 == 0b100101,
-            "constructor helper call is not BL")
-    require(struct.unpack_from('<I', data, renderer.offset(builder + 24, 4))[0] >> 26 == 0b000101,
-            "group helper tail is not B")
-    decoder = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
-    decoder.detail = True
-    groups = []
-    for start, end in sorted(ranges):
-        require(end - start <= 1024 * 1024, "initializer exceeds analysis bound")
-        offset = renderer.offset(start, end - start, executable=True)
-        registers = {}
-        pending = []
-        covered = 0
-        for ins in decoder.disasm(data[offset:offset + end - start], start):
-            covered += ins.size
-            old = registers.copy()
-            for reg in ins.regs_access()[1]:
-                name = ins.reg_name(reg)
-                registers.pop('x' + name[1:] if name.startswith('w') else name, None)
-            operands = ins.operands
-            if ins.mnemonic in ('adr', 'adrp'):
-                registers[ins.reg_name(operands[0].reg)] = operands[1].imm
-            elif ins.mnemonic == 'add' and len(operands) == 3 and operands[2].type == ARM64_OP_IMM:
-                dest, source = (ins.reg_name(operands[i].reg) for i in (0, 1))
-                if source in old and dest.startswith('x'):
-                    registers[dest] = old[source] + (operands[2].imm << operands[2].shift.value)
-            elif ins.mnemonic == 'mov' and len(operands) == 2 and operands[1].type == ARM64_OP_REG:
-                dest, source = (ins.reg_name(operands[i].reg) for i in (0, 1))
-                if source in old and dest.startswith('x'):
-                    registers[dest] = old[source]
-            elif ins.mnemonic == 'bl':
-                target = operands[0].imm
-                if target == constructor:
-                    require('x1' in old, "unresolved report constructor argument")
-                    pending.append({'call': ins.address, 'name': renderer.string(old['x1'])})
-                elif target == builder:
-                    if any(c['name'] in TEMPLATES for c in pending):
-                        groups.append(pending)
-                    pending = []
-                for reg in list(registers):
-                    if reg.startswith('x') and (int(reg[1:]) <= 18 or reg == 'x30'):
-                        registers.pop(reg, None)
-            elif ins.mnemonic == 'ret' or ins.mnemonic == 'b' or ins.mnemonic.startswith(('b.', 'cb', 'tb', 'br', 'blr')):
-                require(not any(c['name'] in TEMPLATES for c in pending), "control flow crosses an unfinished hazard group")
-                pending = []
-                registers.clear()
-        require(covered == end - start, "undecodable initializer instructions")
-        require(not any(c['name'] in TEMPLATES for c in pending), "unfinished hazard group")
+    from native_layout import discover_layout
+    constructor, builder, groups = discover_layout(renderer, TEMPLATES, json.loads(CATALOG.read_text()))
     catalog = json.loads(CATALOG.read_text())
-    actual = sorted([c['name'] for c in group] for group in groups)
-    require(actual == sorted(catalog['groups']), "report groups changed; asset mappings need review")
     replacements = []
     aliases = {}
     for group in groups:
-        require(len(group) in (4, 5, 6), "unknown report group shape")
+        require(len(group) in (3, 4, 5, 6), "unknown report group shape")
         detail = next(c['name'] for c in reversed(group) if c['name'].startswith(('bigpin_', 'alert_icons/trait_enriched/icon_')))
         suffix = detail.rsplit('/', 1)[-1].removeprefix('bigpin_')
         for call in group:
@@ -231,7 +152,7 @@ def discover(data):
                 name = 'morphe_' + TEMPLATES[call['name']] + '_' + suffix
                 aliases[name] = True
                 replacements.append({'call': call['call'], 'name': name})
-    require(set(aliases) == set(catalog['aliases']), "alias coverage changed")
+    require(set(aliases) <= set(catalog['aliases']), "alias artwork missing")
     require(len({r['call'] for r in replacements}) == len(replacements), "duplicate replacement call")
     pool_size = 0
     for name in aliases:
@@ -330,11 +251,16 @@ def validate_output(original, result, constructor, replacements, stubs):
 def verify_assets(base):
     catalog = json.loads(CATALOG.read_text())
     with zipfile.ZipFile(io.BytesIO(base)) as archive:
+        names = set(archive.namelist())
         for name, expected in catalog['templates'].items():
+            if 'assets/res/skins/default/' + name not in names:
+                continue
             with Image.open(io.BytesIO(archive.read('assets/res/skins/default/' + name))) as image:
                 image = image.convert('RGBA')
                 require(list(image.size) == expected['size'] and hashlib.sha256(image.tobytes()).hexdigest() == expected['rgba_sha256'],
                         'icon template geometry or texture changed: ' + name)
+        for stem in ('tinypin_hazard', 'smallpin_hazard'):
+            require('assets/res/skins/default/' + stem + '.png' in names, 'base icon template missing: ' + stem)
 
 
 def properties(report):

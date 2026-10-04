@@ -1,4 +1,4 @@
-param([string]$AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk", [string]$Jdk = 'C:\Program Files\Android\Android Studio\jbr', [string]$WazeVersion = '5.24.90.901', [string]$BundleVersion = '1.13.0')
+param([string]$AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk", [string]$Jdk = 'C:\Program Files\Android\Android Studio\jbr', [string]$WazeVersion = '5.24.90.901', [string]$BundleVersion = '1.14.0')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 if ($WazeVersion -notmatch '^\d+(\.\d+){3}$' -or $BundleVersion -notmatch '^\d+(\.\d+){2}$') { throw 'Invalid Waze or bundle version.' }
@@ -33,8 +33,11 @@ foreach ($extension in @(
     if ($LASTEXITCODE) { throw 'Extension DEX failed.' }
     Copy-Item (Join-Path $dex 'classes.dex') (Join-Path 'build\themes-bundle\extensions' $extension.Dex)
 }
-python ci/native_icons.py --input "downloads/waze-$WazeVersion-original-arm64.apkm" --resource-root build/generated/native-icons --report build/native-local.json
-if ($LASTEXITCODE) { throw 'Native icon discovery failed.' }
+$fixtureVersions = @(Get-Content ci/compatibility_fixtures.json -Raw | ConvertFrom-Json | Where-Object { -not $_.unsupported_patches } | ForEach-Object { $_.version })
+foreach ($nativeVersion in (@($WazeVersion) + $fixtureVersions | Select-Object -Unique)) {
+    python ci/native_icons.py --input "downloads/waze-$nativeVersion-original-arm64.apkm" --resource-root build/generated/native-icons --report "build/native-local-$nativeVersion.json"
+    if ($LASTEXITCODE) { throw "Native icon discovery failed: $nativeVersion" }
+}
 & .\gradlew.bat themesJar --console=plain "-PwazeVersion=$WazeVersion" "-PbundleVersion=$BundleVersion"
 if ($LASTEXITCODE) { throw 'Theme patch compilation failed.' }
 & $d8 --release --min-api 26 --lib $androidJar --classpath $desktop --output build\themes-dex "build\libs\waze-theme-selector-$BundleVersion.jar"

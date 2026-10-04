@@ -55,17 +55,55 @@ fun refreshSkinVersion(source: ByteArray, versionCode: Int = 1030733, increment:
     return result
 }
 
-/** Replace palette entries and explicit renderer colours; preserve the original schema. */
+/** Find a Lua table without depending on indentation or the closing brace's line. */
+private fun luaTable(source: String, name: String, required: Boolean = true): IntRange? {
+    val declarations = Regex("(?m)(?:^|[,{])\\h*(?:local\\h+)?${Regex.escape(name)}\\h*=").findAll(source).toList()
+    if (declarations.isEmpty() && !required) return null
+    if (declarations.size != 1) throw PatchException("Expected one Lua table: $name")
+    var index = declarations.single().range.last + 1
+    while (index < source.length && source[index].isWhitespace()) index++
+    if (index >= source.length || source[index] != '{') throw PatchException("Expected Lua table value: $name")
+    val start = index
+    var depth = 0
+    while (index < source.length) {
+        when {
+            source.startsWith("--[[", index) -> {
+                val end = source.indexOf("]]", index + 4)
+                if (end < 0) throw PatchException("Unclosed Lua comment: $name")
+                index = end + 2
+            }
+            source.startsWith("--", index) -> index = source.indexOf('\n', index).let { if (it < 0) source.length else it + 1 }
+            source[index] == '\'' || source[index] == '"' -> {
+                val quote = source[index++]
+                while (index < source.length && source[index] != quote) index += if (source[index] == '\\') 2 else 1
+                index++
+            }
+            source[index] == '{' -> { depth++; index++ }
+            source[index] == '}' -> { if (--depth == 0) return start..index; index++ }
+            else -> index++
+        }
+    }
+    throw PatchException("Unclosed Lua table: $name")
+}
+
+/** Replace recognised entries and verify core colours before accepting optional omissions. */
 fun recolorSkin(source: String, palette: Map<String, String>, colors: Map<String, String>): String {
-    val start = source.indexOf("local Palette = {")
-    val end = source.indexOf("\n}", start)
-    if (start < 0 || end < 0) throw PatchException("Waze Lua palette was not found")
+    val table = luaTable(source, "Palette")!!
+    val start = table.first
+    val end = table.last + 1
     var block = source.substring(start, end)
+    val missing = mutableListOf<String>()
+    val required = setOf("map_background", "labels", "sea", "parks")
     for ((key, value) in palette) {
         if (!value.matches(Regex("[0-9A-F]{6}([0-9A-F]{2})?"))) {
             throw PatchException("Invalid theme colour for $key")
         }
-        val entry = Regex("(?m)^(\\h*${Regex.escape(key)}\\h*=\\h*)rgba?\\(0x[0-9a-fA-F]+\\)")
+        val declaration = Regex("(?m)(?:^|[,{])\\h*${Regex.escape(key)}\\h*=")
+        if (!declaration.containsMatchIn(block) && key !in required) {
+            missing.add("Palette.$key")
+            continue
+        }
+        val entry = Regex("(?m)((?:^|[,{])\\h*${Regex.escape(key)}\\h*=\\h*)rgba?\\h*\\(\\h*0x[0-9a-fA-F]+\\h*\\)")
         if (entry.findAll(block).count() != 1) {
             throw PatchException("Expected exactly one Waze palette entry: $key")
         }
@@ -74,21 +112,24 @@ fun recolorSkin(source: String, palette: Map<String, String>, colors: Map<String
     }
     val overrides = buildString {
         append("\n-- Google Maps sampled colours v2: bypass Waze's palette colour transforms.\n")
-        val colorSource = source.substring(source.indexOf("Colors = {"))
+        val colorSource = source.substring(luaTable(source, "Colors")!!)
         for ((path, value) in colors.toSortedMap()) {
             if (!path.matches(Regex("[A-Za-z][A-Za-z0-9]*\\.[A-Za-z][A-Za-z0-9_]*")) ||
                 !value.matches(Regex("[0-9A-F]{6}([0-9A-F]{2})?"))) {
                 throw PatchException("Invalid renderer colour: $path=$value")
             }
             val (group, key) = path.split('.')
-            val groupMatch = Regex("(?ms)^\\h*${Regex.escape(group)}\\h*=\\h*\\{(.*?)^\\h*\\},").find(colorSource)
-                ?: throw PatchException("Missing Waze colour group: $group")
-            if (!Regex("(?m)^\\h*${Regex.escape(key)}\\h*=").containsMatchIn(groupMatch.groupValues[1])) {
-                throw PatchException("Missing Waze renderer colour: $path")
+            val groupRange = luaTable(colorSource, group, required = false)
+            val groupSource = groupRange?.let { colorSource.substring(it) }
+            if (groupSource == null || !Regex("(?m)(?:^|[,{])\\h*${Regex.escape(key)}\\h*=").containsMatchIn(groupSource)) {
+                if (path == "General.map_background") throw PatchException("Missing Waze renderer colour: $path")
+                missing.add("Colors.$path")
+                continue
             }
             val function = if (value.length == 8) "rgba" else "rgb"
             append("Colors.$path = $function(0x$value)\n")
         }
     }
+    if (missing.isNotEmpty()) println("Waze skin has no optional entries: ${missing.joinToString()}")
     return source.substring(0, start) + block + source.substring(end) + overrides
 }

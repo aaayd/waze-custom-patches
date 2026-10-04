@@ -1,6 +1,7 @@
 package local.wazemaps
 
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -46,7 +47,7 @@ internal fun BytecodePatchContext.resourceHooks(): List<MutableMethod> {
 
 internal fun BytecodePatchContext.settingsRenderer(): MutableMethod = findMethod("settings row renderer") { method ->
     method.returnType == "Landroid/view/View;" && method.parameterTypes.size == 1 && "page" in method.strings() &&
-        AccessFlags.FINAL.isSet(method.accessFlags) && method.calls().any { ref ->
+        method.calls().any { ref ->
             ref.definingClass == method.definingClass && ref.returnType == "Landroid/view/View;" &&
                 ref.parameterTypes == method.parameterTypes && classDefBy(method.definingClass).methods.any {
                     it == ref && AccessFlags.ABSTRACT.isSet(it.accessFlags)
@@ -61,9 +62,99 @@ internal fun BytecodePatchContext.assetLoader(): MutableMethod = findMethod("ski
         }
 }
 
-internal fun BytecodePatchContext.moodScreen(): MutableMethod = findMethod("mood screen") {
-    it.name == "onCreate" && it.parameters("Landroid/os/Bundle;") && it.returnType == "V" &&
-        it.code().any { instruction -> ((instruction as? ReferenceInstruction)?.reference as? FieldReference)?.name == "CONFIG_VALUE_MOODS_BETA_ENABLED" }
+internal fun BytecodePatchContext.isSubtype(type: String, parent: String): Boolean =
+    generateSequence(type) { classDefByOrNull(it)?.superclass }.any { it == parent }
+
+internal fun BytecodePatchContext.moodGate(): MutableMethod = findMethod("mood catalogue beta gate") { method ->
+    isSubtype(method.definingClass, "Landroid/app/Activity;") && method.code().any {
+        ((it as? ReferenceInstruction)?.reference as? FieldReference)?.let { field ->
+            field.definingClass == "Lcom/waze/config/ConfigValues;" && field.name == "CONFIG_VALUE_MOODS_BETA_ENABLED"
+        } == true
+    }
+}
+
+internal fun BytecodePatchContext.moodScreen(): MutableMethod {
+    val gate = moodGate()
+    val owner = mutableClassDefBy(gate.definingClass)
+    val create = owner.methods.filter { it.name == "onCreate" && it.parameters("Landroid/os/Bundle;") && it.returnType == "V" }
+        .toList().unique("mood screen lifecycle")
+    val visited = mutableSetOf<Method>()
+    fun reaches(method: Method): Boolean = method == gate || (visited.add(method) &&
+        method.calls().any { ref -> owner.methods.find { it == ref }?.let(::reaches) == true })
+    if (!reaches(create)) throw PatchException("Mood catalogue is not reached from screen creation")
+    return create
+}
+
+internal fun Instruction.arguments(): List<Int> = when (this) {
+    is FiveRegisterInstruction -> listOf(registerC, registerD, registerE, registerF, registerG).take(registerCount)
+    is RegisterRangeInstruction -> (startRegister until startRegister + registerCount).toList()
+    else -> emptyList()
+}
+
+/** Follow a named config object to its boolean result within one basic block. */
+internal fun booleanConfigResult(method: Method, fieldName: String): Pair<Int, Int> {
+    val code = method.code()
+    val offsets = mutableListOf<Int>()
+    var address = 0
+    for (instruction in code) { offsets.add(address); address += instruction.codeUnits }
+    val incoming = code.indices.mapNotNull { index ->
+        (code[index] as? OffsetInstruction)?.let { offsets[index] + it.codeOffset }
+    }.toSet()
+    val start = code.indices.filter {
+        ((code[it] as? ReferenceInstruction)?.reference as? FieldReference)?.let { field ->
+            field.definingClass == "Lcom/waze/config/ConfigValues;" && field.name == fieldName
+        } == true
+    }.unique("$fieldName read")
+    if (code[start].opcode != Opcode.SGET_OBJECT) throw PatchException("Config gate is no longer an object read")
+    val field = (code[start] as ReferenceInstruction).reference as FieldReference
+    val objects = mutableSetOf((code[start] as OneRegisterInstruction).registerA)
+    val boxed = mutableSetOf<Int>()
+    var pending: String? = null
+    for (index in start + 1 until code.size) {
+        val instruction = code[index]
+        if (offsets[index] in incoming || instruction is OffsetInstruction || !instruction.opcode.canContinue()) break
+        val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+        if (ref != null && instruction.arguments().isNotEmpty()) {
+            val args = instruction.arguments()
+            pending = when {
+                ref.definingClass == "Ljava/lang/Boolean;" && ref.name == "booleanValue" && args.singleOrNull() in boxed -> "Z"
+                ref.definingClass == field.type && ref.parameterTypes.isEmpty() && args.singleOrNull() in objects &&
+                    ref.returnType in setOf("Z", "Ljava/lang/Boolean;", "Ljava/lang/Object;") -> ref.returnType
+                ref.definingClass == "Lcom/waze/ConfigManager;" && ref.parameterTypes.map(CharSequence::toString) == listOf(field.type) &&
+                    args.size == 2 && args[1] in objects && ref.returnType == "Z" -> "Z"
+                else -> null
+            }
+            continue
+        }
+        if (instruction.opcode == Opcode.MOVE_RESULT && pending == "Z")
+            return index to (instruction as OneRegisterInstruction).registerA
+        val dest = (instruction as? OneRegisterInstruction)?.registerA
+        if (instruction.opcode == Opcode.CHECK_CAST) continue
+        val source = (instruction as? TwoRegisterInstruction)?.registerB
+        val move = instruction.opcode in setOf(Opcode.MOVE_OBJECT, Opcode.MOVE_OBJECT_FROM16, Opcode.MOVE_OBJECT_16)
+        val objectMove = move && source in objects
+        val boxedMove = move && source in boxed
+        if (instruction.opcode.setsRegister() && dest != null) { objects.remove(dest); boxed.remove(dest) }
+        if (objectMove) objects.add(dest!!)
+        if (boxedMove || (instruction.opcode == Opcode.MOVE_RESULT_OBJECT && pending in setOf("Ljava/lang/Boolean;", "Ljava/lang/Object;"))) boxed.add(dest!!)
+        pending = null
+    }
+    throw PatchException("Cannot trace $fieldName to a boolean result without crossing control flow")
+}
+
+internal fun BytecodePatchContext.configSynced(): MutableMethod {
+    val manager = mutableClassDefBy("Lcom/waze/ConfigManager;")
+    val fromServer = manager.methods.filter { it.name == "onConfigSyncedFromServer" && it.parameters() && it.returnType == "V" }.toList()
+    if (fromServer.isNotEmpty()) return fromServer.unique("server config callback").also {
+        if (it.implementation == null || it.calls().isEmpty()) throw PatchException("Server config callback has no dispatcher")
+    }
+    return manager.methods.filter { method ->
+        method.parameters() && method.returnType == "V" && method.calls().any {
+            it.definingClass == "Lcom/waze/NativeManager;" && it.name == "runMainThreadTask" &&
+                it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/Runnable;")
+        } && method.calls().any { it.name == "clear" && it.definingClass == "Ljava/util/List;" } &&
+            method.code().any { instruction -> instruction.opcode == Opcode.IPUT_BOOLEAN }
+    }.toList().unique("configuration sync completion")
 }
 
 internal fun BytecodePatchContext.configGetter(fields: List<String>, boxed: String, primitive: String): MutableMethod {
@@ -143,26 +234,39 @@ internal fun BytecodePatchContext.bindExtension(extension: String, context: Bool
     if (context) {
         val prepare = resourcePrepare()
         val resolver = prepare.calls().filter {
-            it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/Class;") && it.returnType == "Ljava/lang/Object;"
+            (it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/Class;") && it.returnType == "Ljava/lang/Object;") ||
+                (it.parameterTypes.isEmpty() && isSubtype(it.returnType, "Landroid/content/Context;"))
         }.distinct().unique("application resolver")
         val resolved = classDefBy(resolver.definingClass).methods.filter { it == resolver }.toList().unique("application resolver method")
         if (!AccessFlags.PUBLIC.isSet(resolved.accessFlags) || !AccessFlags.STATIC.isSet(resolved.accessFlags) ||
-            prepare.code().none { ((it as? ReferenceInstruction)?.reference as? TypeReference)?.type == "Landroid/app/Application;" })
+            (resolver.parameterTypes.isNotEmpty() && prepare.code().none {
+                ((it as? ReferenceInstruction)?.reference as? TypeReference)?.type == "Landroid/app/Application;"
+            }))
             throw PatchException("Application resolver contract changed")
-        bindings["k.z"] = resolver.definingClass.removePrefix("L").removeSuffix(";").replace('/', '.')
-        bindings["j"] = resolver.name
+        val bridge = mutableClassDefBy(extension).methods.filter { it.name == "application" && it.parameters() && it.returnType == "Landroid/content/Context;" }
+            .toList().unique("extension application bridge")
+        if (bridge.implementation!!.registerCount < 1) throw PatchException("Application bridge has no scratch register")
+        val invoke = if (resolver.parameterTypes.isEmpty()) "invoke-static {}, $resolver" else
+            "const-class v0, Landroid/app/Application;\ninvoke-static {v0}, $resolver"
+        bridge.addInstructions(0, "$invoke\nmove-result-object v0\ncheck-cast v0, Landroid/content/Context;\nreturn-object v0")
+        println("Waze application bridge $extension -> $resolver")
     }
     if (rows) {
         // The custom view name is part of Waze's XML layout contract, unlike its methods.
         val row = classDefBy("Lcom/waze/settings/tree/views/WazeSettingsView;")
-        val title = row.methods.filter { method -> method.parameters("Ljava/lang/String;") && method.returnType == "V" &&
-            method.calls().size == 1 && method.calls().single().let { it.name == "setText" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/CharSequence;") }
+        val title = row.methods.filter { method -> method.parameters("Ljava/lang/String;") && method.returnType in setOf("V", row.type) &&
+            method.calls().count { it.name == "setText" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/CharSequence;") } == 1 &&
+            method.calls().none { it.name in setOf("setVisibility", "getHint") }
         }.toList().unique("settings title setter")
-        val subtitle = row.methods.filter { method -> method.parameters("Ljava/lang/String;") && method.returnType == "V" &&
+        val subtitle = row.methods.filter { method -> method.parameters("Ljava/lang/String;") && method.returnType in setOf("V", row.type) &&
             method.calls().any { it.name == "getHint" } && method.calls().any { it.name == "setText" } && method.calls().any { it.name == "setVisibility" }
         }.toList().unique("settings subtitle setter")
-        val style = row.methods.filter { method -> method.parameters("I") && method.returnType == "V" &&
-            "layout_inflater" in method.strings() && method.calls().any { it.definingClass == "Landroid/view/LayoutInflater;" && it.name == "inflate" }
+        fun inflates(method: Method, seen: MutableSet<Method> = mutableSetOf()): Boolean = seen.add(method) &&
+            (method.calls().any { it.definingClass == "Landroid/view/LayoutInflater;" && it.name == "inflate" } ||
+                method.calls().any { ref -> row.methods.find { it == ref }?.let { inflates(it, seen) } == true })
+        val style = row.methods.filter { method -> method.parameters("I") && method.returnType in setOf("V", row.type) &&
+            method.code().any { instruction -> instruction.opcode == Opcode.IPUT &&
+                ((instruction as? ReferenceInstruction)?.reference as? FieldReference)?.definingClass == row.type } && inflates(method)
         }.toList().unique("settings style setter")
         for (method in listOf(title, subtitle, style)) if (!AccessFlags.PUBLIC.isSet(method.accessFlags))
             throw PatchException("Settings binding is no longer public")

@@ -24,7 +24,8 @@ def main():
     original, base = read_package(args.input)
     verify_assets(base)
     report = discover(original)
-    require(report['call_sites'] == 98 and report['groups'] == 25, 'regression coverage changed')
+    require(report['groups'] >= 8 and report['groups'] * 2 <= report['call_sites'] <= report['groups'] * 4,
+            'incomplete report coverage')
     renderer = Renderer(original)
     changed = bytearray(original)
     changed[renderer.offset(report['builder'])] ^= 1
@@ -34,11 +35,14 @@ def main():
     patch = next(p for p in report['patches'] if len(p['before']) == 8)
     struct.pack_into('<I', changed, patch['offset'], 0xd503201f)
     rejected(changed, 'missing report constructor call')
+    # An unused duplicate helper is not an ambiguous live report table.
     changed = bytearray(original)
     at = renderer.text['sh_offset']
     start = renderer.offset(report['builder'], 28)
     changed[at:at + 28] = original[start:start + 28]
-    rejected(changed, 'ambiguous helper fingerprint')
+    duplicate = discover(bytes(changed))
+    require(duplicate['groups'] == report['groups'] and duplicate['call_sites'] == report['call_sites'],
+            'unreferenced helper duplication changes discovery')
     changed = bytearray(original)
     changed[4] = 1
     rejected(changed, 'wrong ELF class')
@@ -60,7 +64,7 @@ def main():
         require('geometry or texture changed' in str(error), 'unexpected asset failure')
     else:
         raise AssertionError('Accepted changed icon geometry')
-    print('PASS native discovery: real report mappings, output disassembly and ELF mapping; rejects changed helpers, missing calls, ambiguity and wrong architecture; accepts unrelated metadata changes')
+    print('PASS native discovery: real report mappings, output disassembly and ELF mapping; rejects changed helpers, missing calls and wrong architecture; accepts unrelated metadata changes and unused helper duplicates')
 
 
 if __name__ == '__main__':

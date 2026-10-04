@@ -18,6 +18,10 @@ import java.util.*;
 
 /** Map texture copies and Java asset reads use the same selected pack. */
 public final class IconPack {
+    private static Context application() throws Exception {
+        return (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+    }
+
     private static final String TAG = "MorpheIcons";
     private static final String PREFS = "morphe_map_themes";
     private static final String KEY = "icon_pack";
@@ -55,7 +59,7 @@ public final class IconPack {
     public static InputStream open(String name) {
         try {
             if (paths == null) {
-                Context context = (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+                Context context = application();
                 initialize(context);
             }
             if (!google || name == null || !paths.contains(name)) return null;
@@ -69,7 +73,7 @@ public final class IconPack {
     /** Runs independently after Waze prepares or resets its extracted resources. */
     public static void prepare() {
         try {
-            Context context = (Context) Class.forName("k.z").getMethod("j", Class.class).invoke(null, Application.class);
+            Context context = application();
             prepare(context);
         } catch (Exception error) {
             Log.e(TAG, "Could not prepare icon pack", error);

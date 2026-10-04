@@ -67,34 +67,60 @@ public class ValidatePatchSelection {
         }
         return false;
     }
+    static Method methodWithoutArguments(Map<String, ClassDef> classes, String type, String name) {
+        List<Method> candidates = new ArrayList<>();
+        for (var method : classes.get(type).getMethods()) if (method.getName().equals(name) && method.getParameterTypes().isEmpty()) candidates.add(method);
+        return only(candidates, type + name);
+    }
+    static List<MethodReference> methodCalls(Method method) {
+        List<MethodReference> refs = new ArrayList<>();
+        if (method.getImplementation() != null) for (var instruction : method.getImplementation().getInstructions())
+            if (instruction instanceof ReferenceInstruction && ((ReferenceInstruction) instruction).getReference() instanceof MethodReference)
+                refs.add((MethodReference) ((ReferenceInstruction) instruction).getReference());
+        return refs;
+    }
+    static boolean writesIntegerField(Method method) {
+        for (var instruction : method.getImplementation().getInstructions()) if (instruction.getOpcode() == Opcode.IPUT) return true;
+        return false;
+    }
+    static boolean inflates(Method method, Map<String, ClassDef> classes, Set<Method> seen) {
+        if (!seen.add(method)) return false;
+        for (var ref : methodCalls(method)) {
+            if (ref.getDefiningClass().equals("Landroid/view/LayoutInflater;") && ref.getName().equals("inflate")) return true;
+            if (ref.getDefiningClass().equals(method.getDefiningClass()))
+                for (var target : classes.get(ref.getDefiningClass()).getMethods()) if (target.equals(ref) && inflates(target, classes, seen)) return true;
+        }
+        return false;
+    }
     static void bindings(Map<String, ClassDef> classes, String extension, boolean context, boolean rows) {
         Set<String> actual = new HashSet<>();
         for (var type : classes.values()) if (type.getType().equals(extension) || type.getType().startsWith(extension.replace(";", "$")))
             for (var method : type.getMethods()) actual.addAll(strings(method));
         if (context) {
             Method prepare = only(methods(classes).stream().filter(m -> strings(m).contains("Resources extraction unnecessary")).toList(), "resource preparation");
-            List<MethodReference> resolvers = new ArrayList<>();
-            for (var instruction : prepare.getImplementation().getInstructions()) if (instruction instanceof ReferenceInstruction) {
-                var ref = ((ReferenceInstruction) instruction).getReference();
-                if (ref instanceof MethodReference) {
-                    var method = (MethodReference) ref;
-                    if (method.getReturnType().equals("Ljava/lang/Object;") && method.getParameterTypes().toString().equals("[Ljava/lang/Class;]")) resolvers.add(method);
-                }
+            Method bridge = methodWithoutArguments(classes, extension, "application");
+            List<MethodReference> prepareCalls = methodCalls(prepare);
+            var firstCall = methodCalls(bridge).get(0);
+            require(prepareCalls.contains(firstCall), "Application bridge does not use Waze's actual context provider");
+            require(firstCall.getParameterTypes().isEmpty() || firstCall.getParameterTypes().toString().equals("[Ljava/lang/Class;]"), "Unsupported application bridge arguments");
+            require(firstCall.getReturnType().startsWith("L"), "Application bridge must return an object");
+            boolean returned = false;
+            for (var instruction : bridge.getImplementation().getInstructions()) {
+                if (instruction.getOpcode() == Opcode.RETURN_OBJECT) { returned = true; break; }
+                if (instruction instanceof ReferenceInstruction && ((ReferenceInstruction) instruction).getReference() instanceof MethodReference)
+                    require(((ReferenceInstruction) instruction).getReference().equals(firstCall), "Application bridge uses an unverified method before returning");
             }
-            require(resolvers.size() == 1, "Application resolver ambiguous");
-            var resolver = resolvers.get(0);
-            String owner = resolver.getDefiningClass().substring(1, resolver.getDefiningClass().length() - 1).replace('/', '.');
-            require(actual.contains(owner) && actual.contains(resolver.getName()), "Runtime application lookup was not rebound: " + extension);
+            require(returned, "Application bridge has no return");
         }
         if (rows) {
             List<Method> setters = new ArrayList<>();
-            for (var method : classes.get("Lcom/waze/settings/tree/views/WazeSettingsView;").getMethods()) if (method.getImplementation() != null && method.getReturnType().equals("V")) {
+            for (var method : classes.get("Lcom/waze/settings/tree/views/WazeSettingsView;").getMethods()) if (method.getImplementation() != null && (method.getReturnType().equals("V") || method.getReturnType().equals("Lcom/waze/settings/tree/views/WazeSettingsView;"))) {
                 List<MethodReference> calls = new ArrayList<>();
                 for (var instruction : method.getImplementation().getInstructions()) if (instruction instanceof ReferenceInstruction && ((ReferenceInstruction) instruction).getReference() instanceof MethodReference)
                     calls.add((MethodReference) ((ReferenceInstruction) instruction).getReference());
                 boolean text = method.getParameterTypes().toString().equals("[Ljava/lang/String;]") &&
-                    ((calls.size() == 1 && calls.get(0).getName().equals("setText")) || calls.stream().anyMatch(c -> c.getName().equals("getHint")));
-                boolean style = method.getParameterTypes().toString().equals("[I]") && strings(method).contains("layout_inflater");
+                    ((calls.stream().filter(c -> c.getName().equals("setText") && c.getParameterTypes().toString().equals("[Ljava/lang/CharSequence;]")).count() == 1 && calls.stream().noneMatch(c -> Set.of("setVisibility", "getHint").contains(c.getName()))) || calls.stream().anyMatch(c -> c.getName().equals("getHint")));
+                boolean style = method.getParameterTypes().toString().equals("[I]") && writesIntegerField(method) && inflates(method, classes, new HashSet<>());
                 if (text || style) setters.add(method);
             }
             require(setters.size() == 3, "Settings setter structure changed");
@@ -113,6 +139,26 @@ public class ValidatePatchSelection {
             require(classes.put(type.getType(), type) == null, "Duplicate class " + type.getType());
         require(classes.containsKey(prefix + "ThemeSelector;") == themes, "Theme class selection");
         require(classes.containsKey(prefix + "IconPack;") == icons, "Icon class selection");
+        String badgeType = "Llocal/wazemaps/badges/BadgeSelector;";
+        int badgeHooks = 0;
+        for (var method : methods(classes)) {
+            boolean resumed = false;
+            int activity = method.getImplementation().getRegisterCount() - 1;
+            for (var instruction : method.getImplementation().getInstructions()) {
+                if ((instruction.getOpcode() == Opcode.INVOKE_SUPER || instruction.getOpcode() == Opcode.INVOKE_SUPER_RANGE) &&
+                        ((MethodReference) ((ReferenceInstruction) instruction).getReference()).getName().equals("onResume")) resumed = true;
+                if (calls(instruction, badgeType, "install")) {
+                    require(method.getName().equals("onResume") && method.getParameterTypes().isEmpty() && resumed,
+                        "Badge controls must be installed after superclass resume");
+                    require(instruction instanceof RegisterRangeInstruction && ((RegisterRangeInstruction) instruction).getStartRegister() == activity,
+                        "Badge hook must receive the Activity");
+                    badgeHooks++;
+                }
+                if (resumed && instruction.getOpcode().setsRegister() && instruction instanceof OneRegisterInstruction &&
+                        ((OneRegisterInstruction) instruction).getRegisterA() == activity) resumed = false;
+            }
+        }
+        require(badgeHooks == (classes.containsKey(badgeType) ? 1 : 0), "Badge lifecycle hook selection");
         for (String name : List.of("CompanionInstaller", "CompanionSetupActivity", "CompanionApkProvider", "AndroidAutoSettings"))
             require(classes.containsKey(prefix + name + ";") == auto, "Android Auto class selection: " + name);
         var launch = method(classes, "Lcom/waze/MainActivity;", "onCreate", "Landroid/os/Bundle;");
@@ -129,7 +175,7 @@ public class ValidatePatchSelection {
         }
         require(attach == (auto ? 1 : 0), "Unexpected startup hook count");
         var render = only(methods(classes).stream().filter(m -> m.getReturnType().equals("Landroid/view/View;") &&
-            m.getParameterTypes().size() == 1 && AccessFlags.FINAL.isSet(m.getAccessFlags()) && strings(m).contains("page") && delegatesToAbstract(m, classes)).toList(), "settings renderer");
+            m.getParameterTypes().size() == 1 && strings(m).contains("page") && delegatesToAbstract(m, classes)).toList(), "settings renderer");
         int exits = 0, themeRows = 0, iconRows = 0, autoRows = 0, alertRows = 0;
         for (var instruction : render.getImplementation().getInstructions()) {
             if (instruction.getOpcode() == Opcode.RETURN_OBJECT) exits++;
@@ -165,7 +211,7 @@ public class ValidatePatchSelection {
                     }
                 }
             }
-            for (var method : classes.get("Lcom/waze/ConfigManager;").getMethods()) if (method.getName().equals("onConfigSyncedFromServer")) {
+            for (var method : classes.get("Lcom/waze/ConfigManager;").getMethods()) if (method.getName().equals("onConfigSyncedFromServer") || method.getName().equals("onConfigSynced")) {
                 for (var instruction : method.getImplementation().getInstructions())
                     if (calls(instruction, feature[0], "scheduleApply")) syncHooks++;
             }

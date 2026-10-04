@@ -4,6 +4,8 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.*
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.reandroid.arsc.chunk.TableBlock
 
 private const val BADGE_EXTENSION = "Llocal/wazemaps/badges/BadgeSelector;"
@@ -38,16 +40,27 @@ val badgeSelectorPatch = bytecodePatch(
         val badge = mood.methods.singleOrNull {
             it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;") &&
             it.returnType == "Landroid/graphics/drawable/Drawable;" &&
-            it.strings().containsAll(listOf("shield", "edit", "crown", "sword", "wings", "_ui.png")) }
+            ("_ui.png" in it.strings() || it.strings().containsAll(listOf("_ui", ".png"))) &&
+            it.calls().any { ref -> ref.parameterTypes.map(CharSequence::toString) ==
+                listOf("Landroid/content/res/Resources;", "Ljava/lang/String;") &&
+                ref.returnType == "Landroid/graphics/drawable/Drawable;" } &&
+            it.calls().any { ref -> ref.definingClass == "Ljava/lang/Integer;" && ref.name == "intValue" } }
             ?: throw PatchException("Expected Waze badge renderer")
         val create = moodScreen()
-        val returns = create.implementation!!.instructions.mapIndexedNotNull { index, instruction ->
-            index.takeIf { instruction.opcode == Opcode.RETURN_VOID }
-        }
-        if (returns.isEmpty() || badge.implementation!!.registerCount < 3) throw PatchException("Unexpected Waze badge method layout")
-        val activityRegister = create.implementation!!.registerCount - 2
-        if (create.code().any { it.opcode.setsRegister() && (it as? OneRegisterInstruction)?.registerA == activityRegister })
-            throw PatchException("Mood screen reuses its Activity register before the badge hook")
+        val resume = mutableClassDefBy(create.definingClass).methods.singleOrNull {
+            it.name == "onResume" && it.parameters() && it.returnType == "V"
+        } ?: throw PatchException("Mood screen resume lifecycle missing")
+        val superCall = resume.code().indices.singleOrNull { index ->
+            val instruction = resume.code()[index]
+            val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            instruction.opcode in setOf(Opcode.INVOKE_SUPER, Opcode.INVOKE_SUPER_RANGE) &&
+                ref?.name == "onResume" && ref.parameterTypes.isEmpty() && ref.returnType == "V"
+        } ?: throw PatchException("Mood screen resume superclass call missing")
+        val activityRegister = resume.implementation!!.registerCount - 1
+        if (badge.implementation!!.registerCount < 3 || resume.code().take(superCall + 1).any {
+                it is com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction ||
+                    (it.opcode.setsRegister() && (it as? OneRegisterInstruction)?.registerA == activityRegister)
+            }) throw PatchException("Mood screen Activity is not live after superclass resume")
         // 2 + (-2) == 0 selects the untouched original renderer for Automatic.
         badge.addInstructions(0, """
             invoke-static/range {p1 .. p1}, $BADGE_EXTENSION->selection(Landroid/content/Context;)I
@@ -62,6 +75,6 @@ val badgeSelectorPatch = bytecodePatch(
             :account_badge
             nop
         """)
-        returns.reversed().forEach { create.addInstructions(it, "invoke-static/range {p0 .. p0}, $BADGE_EXTENSION->install(Landroid/app/Activity;)V") }
+        resume.addInstructions(superCall + 1, "invoke-static/range {p0 .. p0}, $BADGE_EXTENSION->install(Landroid/app/Activity;)V")
     }
 }

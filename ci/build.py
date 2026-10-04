@@ -156,6 +156,38 @@ def main():
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "ValidateBadgeResources")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateAlertDistance")
     run(java, "-cp", os.pathsep.join([str(settings_classes), settings_cp]), "local.wazemaps.alerts.ValidateCameraSound")
+    fixture_inputs = []
+    for fixture in json.loads((ROOT / "ci/compatibility_fixtures.json").read_text()):
+        if fixture["version"] == version:
+            continue
+        fixture_source = ROOT / "downloads" / f"waze-{fixture['version']}-original-arm64.apkm"
+        if not fixture_source.exists():
+            fixture_source.parent.mkdir(exist_ok=True)
+            if "url" in fixture:
+                with urlopen(fixture["url"], timeout=120) as response, fixture_source.open("wb") as target:
+                    shutil.copyfileobj(response, target)
+            else:
+                from upstream import download, requests
+                download(requests.Session(impersonate="chrome"), fixture, fixture_source)
+        if sha(fixture_source) != fixture["sha256"]:
+            raise ValueError("Compatibility fixture checksum changed")
+        fixture_work = work / fixture["version"]
+        fixture_work.mkdir()
+        inspect_original(fixture_source, fixture_work, aapt, signer, fixture)
+        if fixture.get("unsupported_patches"):
+            try:
+                prepare_profile(fixture_source, ROOT / "build/generated/native-icons", fixture_work / "native-profile.json")
+            except ValueError as error:
+                if "inlined layouts require review" not in str(error):
+                    raise
+            else:
+                raise ValueError("Oldest renderer is now supported; update its expected compatibility")
+            fixture_report = None
+        else:
+            fixture_report = prepare_profile(fixture_source, ROOT / "build/generated/native-icons", fixture_work / "native-profile.json")
+            run(os.sys.executable, ROOT / "ci/native_regression.py", "--input", fixture_source)
+        fixture_inputs.append((fixture, fixture_source, fixture_work, fixture_report))
+
     bundle_version = f"{BUNDLE_SERIES}.{metadata['version_code']}"
     gradle = [str(ROOT / "gradlew.bat")] if windows else ["bash", str(ROOT / "gradlew")]
     run(*gradle, "themesJar", "--no-daemon", "--console=plain", f"-PwazeVersion={version}", f"-PbundleVersion={bundle_version}")
@@ -170,6 +202,9 @@ def main():
         for name, path in extensions.items():
             archive.write(path, "extensions/" + name)
         archive.write(companion, "installer/waze-aa-installer.apk")
+    discovery_cp = os.pathsep.join([str(desktop), str(bundle)])
+    run(javac, "-cp", discovery_cp, "-d", work, ROOT / "ci/java/ValidateDiscovery.java")
+    run(java, "-cp", os.pathsep.join([str(work), discovery_cp]), "ValidateDiscovery")
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/ValidateBundleOptions.java")
     run(java, "-cp", os.pathsep.join([str(work), str(desktop)]), "ValidateBundleOptions", bundle)
     unsigned = work / "patched-unsigned.apk"
@@ -195,35 +230,25 @@ def main():
         run(java, "-cp", validation_cp, "ValidatePatchSelection", subset, theme, icons, auto, alerts, camera, metadata["version_code"])
     verify_patched_apk(unsigned, native_report)
     verified_versions = [version]
-    for fixture in json.loads((ROOT / "ci/compatibility_fixtures.json").read_text()):
-        if fixture["version"] == version:
-            continue
-        fixture_source = ROOT / "downloads" / f"waze-{fixture['version']}-original-arm64.apkm"
-        if not fixture_source.exists():
-            fixture_source.parent.mkdir(exist_ok=True)
-            if "url" in fixture:
-                with urlopen(fixture["url"], timeout=120) as response, fixture_source.open("wb") as target:
-                    shutil.copyfileobj(response, target)
-            else:
-                from upstream import download, requests
-                download(requests.Session(impersonate="chrome"), fixture, fixture_source)
-        if sha(fixture_source) != fixture["sha256"]:
-            raise ValueError("Compatibility fixture checksum changed")
-        fixture_work = work / fixture["version"]
-        fixture_work.mkdir()
-        inspect_original(fixture_source, fixture_work, aapt, signer, fixture)
-        fixture_report = prepare_profile(fixture_source, ROOT / "build/generated/native-icons", fixture_work / "native-profile.json")
-        run(os.sys.executable, ROOT / "ci/native_regression.py", "--input", fixture_source)
+    for fixture, fixture_source, fixture_work, fixture_report in fixture_inputs:
         fixture_apk = fixture_work / "patched.apk"
         fixture_result = fixture_work / "patch-report.json"
-        run(java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
-            "--striplibs", "arm64-v8a", "-p", bundle, "-o", fixture_apk, "-r", fixture_result, fixture_source)
+        unsupported = set(fixture.get("unsupported_patches", []))
+        command = [java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
+                   "--striplibs", "arm64-v8a", "-p", bundle, "-o", fixture_apk, "-r", fixture_result]
+        if unsupported:
+            command += ["--force", "--continue-on-error"]
+        run(*command, fixture_source)
         applied = json.loads(fixture_result.read_text())
-        if applied.get("failedPatches") or {x["name"] for x in applied.get("appliedPatches", [])} != OPTIONS:
+        failed = {x["patch"]["name"] for x in applied.get("failedPatches", [])}
+        if failed != unsupported or {x["name"] for x in applied.get("appliedPatches", [])} != OPTIONS - unsupported:
             raise ValueError("Compatibility regression failed for " + fixture["version"])
+        if not applied.get("patchingSteps") or any(not step["success"] for step in applied["patchingSteps"]):
+            raise ValueError("Compatibility APK reconstruction failed")
         run(java, "-cp", validation_cp, "ValidatePatchSelection", fixture_apk, "true", "true", "true", "true", "true", fixture["version_code"])
-        verify_patched_apk(fixture_apk, fixture_report)
-        verified_versions.append(fixture["version"])
+        if fixture_report:
+            verify_patched_apk(fixture_apk, fixture_report)
+            verified_versions.append(fixture["version"])
     # Only synthetic, unsigned test inputs bypass certificate matching. Real releases above never do.
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/MutateBindingFixture.java")
     mutation_source = ROOT / "downloads/waze-5.24.5.0-original-arm64.apkm"
@@ -275,7 +300,7 @@ def main():
     shutil.copyfile(source, original)
     metadata.update(bundle_version=bundle_version, patched=identity, changes=RELEASE_NOTES, compatible_versions=verified_versions,
                     source_commit=run("git", "rev-parse", "HEAD", capture=True).strip(),
-                    validation="Structural bytecode discovery, runtime reflection bindings, eight-class/twenty-method synthetic obfuscation and ambiguous-hook rejection, native discovery, ELF and branch validation, pinned previous-version regression, eight patches, all 256 option combinations, independent feature APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
+                    validation="Semantic bytecode and native resource discovery, direct context bridges, data-flow and palette fixtures, eight-class/twenty-method synthetic obfuscation, ambiguity rejection, native ELF and branch validation, January seven-patch and April/July/full pinned regressions, all 256 option combinations, independent feature APKs, signatures, package metadata, 16 KiB ZIP alignment. No device runtime test in CI.")
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (output / "SHA256SUMS.txt").write_text("".join(f"{sha(p)}  {p.name}\n" for p in sorted(output.iterdir()) if p.is_file()))
     print(f"Release ready: {output}")
