@@ -3,7 +3,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from upstream import release_exists
+from upstream import published_waze_releases, release_plan
 
 
 def main():
@@ -12,8 +12,12 @@ def main():
     tag = os.environ["RELEASE_TAG"]
     if tag != info["tag"]:
         raise ValueError("Release tag does not match validated input")
-    if release_exists(os.environ["GITHUB_REPOSITORY"], tag):
-        print("Release already published; rebuilt artifacts are available in this workflow run.")
+    if info.get("publish") is not True:
+        print("Build is artifacts only; publishing was not requested by the upstream check.")
+        return
+    plan = release_plan(info, published_waze_releases(os.environ["GITHUB_REPOSITORY"]))
+    if not plan["publish"]:
+        print(plan["reason"])
         return
     required = [f"waze-{info['version']}-original-arm64{info['extension']}",
                 f"waze-{info['version']}-patched-arm64.apk",

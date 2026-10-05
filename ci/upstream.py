@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
 
 from bs4 import BeautifulSoup
 from curl_cffi import requests
@@ -54,18 +53,50 @@ def discover(session):
             "extension": ".apkm" if "BUNDLE" in text else ".apk"}
 
 
-def release_exists(repository, tag):
-    request = Request(f"https://api.github.com/repos/{repository}/releases/tags/{tag}",
-                      headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
-                               "Accept": "application/vnd.github+json"})
-    try:
+def published_waze_releases(repository):
+    """Read every page: publication order is not Waze version order."""
+    releases = []
+    page_number = 1
+    while True:
+        request = Request(
+            f"https://api.github.com/repos/{repository}/releases?per_page=100&page={page_number}",
+            headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                     "Accept": "application/vnd.github+json"})
         with urlopen(request, timeout=30) as response:
-            release = json.load(response)
-            return not release.get("draft", False)
-    except HTTPError as error:
-        if error.code == 404:
-            return False
-        raise
+            batch = json.load(response)
+        for release in batch:
+            tag = release["tag_name"]
+            if release.get("draft", False) or not tag.startswith("waze-"):
+                continue
+            match = re.fullmatch(r"waze-(\d+(?:\.\d+){3})-(\d+)(?:-patches-\d+\.\d+)?", tag)
+            if not match:
+                raise ValueError(f"Cannot determine published Waze version from tag: {tag}")
+            releases.append({"version": match[1], "version_code": int(match[2]), "tag": tag,
+                             "prerelease": release.get("prerelease", False)})
+        if len(batch) < 100:
+            return releases
+        page_number += 1
+
+
+def release_plan(metadata, releases, force=False):
+    version = tuple(map(int, metadata["version"].split(".")))
+    newer = all(metadata["version_code"] > release["version_code"]
+                and version >= tuple(map(int, release["version"].split(".")))
+                for release in releases)
+    # Keep the first (most recently published) bundle when Waze builds tie.
+    latest = max(releases, key=lambda release: release["version_code"], default=None)
+    source = max((release for release in releases if not release.get("prerelease", False)),
+                 key=lambda release: release["version_code"], default=None)
+    publish = newer and not force
+    if force:
+        reason = "Manual test build requested; artifacts only, no release will be published."
+    elif newer:
+        reason = f"Waze {metadata['version']} ({metadata['version_code']}) is a new upstream build."
+    else:
+        reason = (f"Waze {metadata['version']} ({metadata['version_code']}) has not increased beyond "
+                  f"published {latest['version']} ({latest['version_code']}); download, build and publishing skipped.")
+    return {"skip": not (newer or force), "publish": publish, "reason": reason,
+            "source_tag": metadata["tag"] if publish else source["tag"] if source else ""}
 
 
 def download(session, metadata, destination):
@@ -106,15 +137,16 @@ def main():
     metadata_path = Path(args.metadata)
     if args.command == "check":
         metadata = discover(session)
-        repository = os.environ.get("GITHUB_REPOSITORY")
-        skip = bool(repository and release_exists(repository, metadata["tag"])) and not args.force
-        metadata["skip"] = skip
+        repository = os.environ["GITHUB_REPOSITORY"]
+        metadata.update(release_plan(metadata, published_waze_releases(repository), args.force))
         metadata_path.parent.mkdir(parents=True, exist_ok=True)
         metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
         print(json.dumps(metadata, indent=2))
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-                output.write(f"build={'false' if skip else 'true'}\ntag={metadata['tag']}\n")
+                output.write(f"build={'false' if metadata['skip'] else 'true'}\ntag={metadata['tag']}\n"
+                             f"publish={str(metadata['publish']).lower()}\nsource_tag={metadata['source_tag']}\n"
+                             f"reason={metadata['reason']}\n")
     else:
         metadata = json.loads(metadata_path.read_text())
         path = Path("downloads") / f"waze-{metadata['version']}-original-arm64{metadata['extension']}"

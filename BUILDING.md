@@ -3,8 +3,10 @@
 ## Nightly releases
 
 GitHub Actions checks APKMirror at **00:00 UTC daily** (01:00 UK summer time).
-If that Waze version and versionCode already has a published release, it stops
-before downloading the app or setting up the Android build toolchain.
+It compares against all published Waze releases, regardless of patch bundle series.
+Only a higher upstream versionCode with no version-number downgrade triggers a
+build and release. The same or an older Waze build stops before downloading the
+app or setting up the Android build toolchain.
 Otherwise it downloads the newest uploaded release's ARM64 package, verifies
 Waze's original signing certificate on every split, and attempts all eight patches.
 
@@ -30,21 +32,21 @@ next night until fixed. It never silently ships a subset of the eight patches.
 CI validates patching, bundle choices, signatures, package metadata and alignment;
 it does not perform a phone/emulator runtime test.
 
-The manual **Run workflow** button retries immediately. `force` rebuilds an
-already released version into workflow artifacts without replacing that release.
+The manual **Run workflow** button retries immediately. `force` builds test
+artifacts only, even for a new Waze version; it never publishes a release.
 Interrupted uploads remain drafts until a later successful upload finishes.
 After publishing, the workflow updates `patches-bundle.json` and `CHANGELOG.md`
 together. Runs with no new Waze version also check that this source metadata is
 current, without rebuilding the APK or bundle. An interrupted metadata update is
 therefore repaired on the next run.
 
-## Patch-only releases
+## Testing patch updates
 
-Bump `BUNDLE_SERIES` in `ci/release_config.py` when changing patches for an
-already-supported Waze version. The release tag includes that series, so running
-the workflow publishes the new APK and bundle without replacing the old release.
-Update `RELEASE_NOTES` there to describe the change. Once published, unchanged
-nightly checks skip the build as usual.
+Bump `BUNDLE_SERIES` in `ci/release_config.py` and update `RELEASE_NOTES` when
+changing patches. These changes ship with the next newer Waze build. To test
+them sooner, run the workflow with `force` and download its build artifacts.
+Changing the patch series does not bypass the Waze version gate or update the
+public Morphe source. The publishing step rechecks the gate before any upload.
 
 ## Repository setup
 

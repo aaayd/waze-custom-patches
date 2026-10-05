@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: Rebuild an already published version (artifacts only; never replaces a release)
+        description: Force a test build (artifacts only; never publishes a release)
         type: boolean
         default: false
 
@@ -24,6 +24,8 @@ jobs:
     outputs:
       build: ${{ steps.upstream.outputs.build }}
       tag: ${{ steps.upstream.outputs.tag }}
+      publish: ${{ steps.upstream.outputs.publish }}
+      source_tag: ${{ steps.upstream.outputs.source_tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -46,14 +48,9 @@ jobs:
           path: build/upstream.json
       - name: Check summary
         env:
-          BUILD: ${{ steps.upstream.outputs.build }}
-          TAG: ${{ steps.upstream.outputs.tag }}
+          REASON: ${{ steps.upstream.outputs.reason }}
         run: |
-          if [[ "$BUILD" == "true" ]]; then
-            echo "Building $TAG." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "$TAG is already released. Download, build and publishing skipped." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "$REASON" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: check
@@ -105,6 +102,7 @@ jobs:
           set -o pipefail
           python ci/build.py --keystore "$RUNNER_TEMP/waze-release.p12" 2>&1 | tee build/nightly.log
       - name: Publish complete release
+        if: needs.check.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.check.outputs.tag }}
@@ -126,7 +124,7 @@ jobs:
   source:
     name: Update Morphe source
     needs: [check, build]
-    if: always() && needs.check.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    if: always() && needs.check.result == 'success' && needs.check.outputs.source_tag != '' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -139,5 +137,5 @@ jobs:
       - name: Publish metadata for the verified release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.check.outputs.tag }}
+          RELEASE_TAG: ${{ needs.check.outputs.source_tag }}
         run: python ci/source.py

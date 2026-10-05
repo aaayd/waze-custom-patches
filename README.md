@@ -108,6 +108,8 @@ needs testing.
 ## Updates
 
 The repository checks for new Waze releases every night at **00:00 UTC**.
+It builds and publishes only when Waze's upstream versionCode increases, with
+no downgrade in its version number. Patch bundle updates alone do not trigger a release.
 Morphe's source updater supplies new patch bundles. If a new Waze version cannot
 be patched successfully, the previous working release stays available.
 
