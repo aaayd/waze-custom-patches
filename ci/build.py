@@ -29,8 +29,14 @@ def sha(path):
 def run(*args, capture=False):
     args = [str(x) for x in args]
     print("+ " + " ".join(args), flush=True)
-    result = subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE if capture else None,
-                            stderr=subprocess.STDOUT if capture else None)
+    try:
+        result = subprocess.run(args, check=True, text=True, encoding="utf-8", stdout=subprocess.PIPE if capture else None,
+                                stderr=subprocess.STDOUT if capture else None)
+    except subprocess.CalledProcessError as error:
+        # Captured signer/aapt/validator output otherwise disappears from nightly.log.
+        if capture and error.stdout:
+            print(error.stdout, end="" if error.stdout.endswith("\n") else "\n", flush=True)
+        raise
     return result.stdout or ""
 
 
@@ -120,6 +126,8 @@ def main():
     align = sdk_tools / ("zipalign.exe" if windows else "zipalign")
     native_hash = inspect_original(source, work, aapt, signer, metadata)
     metadata.update(original_sha256=sha(source), native_sha256=native_hash)
+    # Preserve verified input provenance even if renderer discovery fails.
+    (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
     native_report = prepare_profile(source, ROOT / "build/generated/native-icons", output / "native-profile.json")
     run(os.sys.executable, ROOT / "ci/native_regression.py", "--input", source)
     (output / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -278,7 +286,7 @@ def main():
             run(java, "-cp", validation_cp, "ValidatePatchSelection", synthetic_apk, "true", "true", "true", "true", "true", 1030732)
         else:
             result = subprocess.run([str(x) for x in command + ["--exclusive", "-e", "Selectable map themes", synthetic]],
-                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                    text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             (work / "ambiguous.log").write_text(result.stdout)
             if result.returncode == 0 or "resource preparation matched 2 candidates" not in result.stdout:
                 raise ValueError("Ambiguous resource hook was not rejected for the expected reason")

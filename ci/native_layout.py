@@ -141,8 +141,29 @@ def discover_layout(renderer, templates, catalog, warnings=None):
                 references[call['target']].append(call['name'])
     constructors = [target for target, names in references.items()
                     if names.count('tinypin_hazard') >= 4 and names.count('smallpin_hazard') >= 4]
-    require(len(constructors) == 1, 'cannot identify one shared report string constructor; inlined layouts require review')
-    constructor = constructors[0]
+    require(constructors, 'cannot identify one shared report string constructor; inlined layouts require review')
+    # Resource names also occur in ordinary icon loaders. Prove the complete
+    # table geometry for each candidate before deciding whether it is ambiguous.
+    matches = []
+    failures = []
+    for constructor in constructors:
+        candidate_warnings = []
+        try:
+            result = discover_groups(renderer, streams, constructor, templates, catalog, candidate_warnings)
+        except ValueError as error:
+            failures.append(error)
+        else:
+            matches.append((result, candidate_warnings))
+    if not matches and len(failures) == 1:
+        raise failures[0]
+    require(len(matches) == 1, 'cannot identify one shared report string constructor with verified report tables')
+    result, candidate_warnings = matches[0]
+    if warnings is not None:
+        warnings.extend(candidate_warnings)
+    return result
+
+
+def discover_groups(renderer, streams, constructor, templates, catalog, warnings):
     groups = []
     builders = set()
     helper_strides = {}

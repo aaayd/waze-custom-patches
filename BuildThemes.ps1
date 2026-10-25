@@ -1,4 +1,4 @@
-param([string]$AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk", [string]$Jdk = 'C:\Program Files\Android\Android Studio\jbr', [string]$WazeVersion = '5.24.90.901', [string]$BundleVersion = '1.15.0')
+param([string]$AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk", [string]$Jdk = 'C:\Program Files\Android\Android Studio\jbr', [string]$WazeVersion = '5.26.0.0', [string]$BundleVersion = '1.16.0')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 if ($WazeVersion -notmatch '^\d+(\.\d+){3}$' -or $BundleVersion -notmatch '^\d+(\.\d+){2}$') { throw 'Invalid Waze or bundle version.' }

@@ -1,5 +1,11 @@
 # Changelog
 
+## Patch series 1.16
+
+- Fix native icon discovery on Waze 5.26.0.0 by validating complete report tables before resolving constructor ambiguity. Unrelated icon loaders no longer block releases; multiple valid tables and malformed tables still fail validation.
+- Pin the failing Waze input as a future compatibility regression.
+- Run Python regression tests on Linux and Windows for pushes and pull requests, and preserve input provenance and compatibility diagnostics on release failures.
+
 ## [1.15.1030738](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.25.5.0-1030738-patches-1.15) (2026-10-15)
 
 Waze 5.25.5.0 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Follow synchronous extraction helpers and delegated icon loaders across old and new Waze versions. Recognise badge artwork overloads and discover mood/badge owners without fixed class names. Missing, unmapped or differently sized icon assets produce warnings and retain Waze artwork; see Icon warnings in the icon-pack dialog. Hide unavailable badge choices and restore Automatic for removed saved badges. Preserve unknown native report groups without modifying their calls, while rejecting ambiguous or broken renderer detection. Add a 2023 seven-patch regression and altered-icon APK tests. Older inlined native icon sizing remains unsupported. Phone and Android Auto runtime testing is still required.

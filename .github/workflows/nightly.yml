@@ -117,6 +117,17 @@ jobs:
             dist/nightly/
             build/upstream.json
             build/nightly.log
+            build/nightly/**/*.json
+            build/nightly/**/*.log
+            build/nightly/**/*.txt
+      - name: Summarize failed build
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo 'The release job failed. Check the failed step and publication status before retrying.'
+            echo 'Download the waze-build artifact for input metadata, patch reports and compatibility logs.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove runner signing key
         if: always()
         run: rm -f -- "$RUNNER_TEMP/waze-release.p12"

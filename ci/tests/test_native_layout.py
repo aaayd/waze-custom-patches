@@ -31,6 +31,19 @@ class ReportDiscoveryTests(unittest.TestCase):
         constructor, builder, groups = self.discover(self.stream)
         self.assertEqual((constructor, builder, len(groups)), (100, 200, 8))
 
+    def test_ignores_loader_with_repeated_resource_names_but_no_tables(self):
+        loader = [dict(call=10000+i*4, target=101, name=name, count=None)
+                  for i, name in enumerate(['tinypin_hazard', 'smallpin_hazard'] * 20)]
+        loader.append(None)
+        constructor, builder, groups = self.discover(self.stream + loader)
+        self.assertEqual((constructor, builder, len(groups)), (100, 200, 8))
+
+    def test_rejects_repeated_names_without_verified_tables(self):
+        loader = [dict(call=i*4, target=100, name=name, count=None)
+                  for i, name in enumerate(['tinypin_hazard', 'smallpin_hazard'] * 20)]
+        with self.assertRaises(ValueError):
+            self.discover(loader + [None])
+
     def test_rejects_two_live_constructors(self):
         other = copy.deepcopy(self.stream)
         for call in other:

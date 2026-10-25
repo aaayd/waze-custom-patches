@@ -42,6 +42,13 @@ therefore repaired on the next run.
 
 ## Testing patch updates
 
+Pushes and pull requests run the Python regression suite on Linux and Windows
+without signing secrets. These checks cover discovery invariants and release
+gates; the full APK and compatibility fixture build remains in the nightly job.
+On a failed nightly, download the `waze-build` artifact: it includes verified
+input metadata, the main build log, and JSON, text and log diagnostics from
+compatibility fixtures. Captured Android tool failures are included in the log.
+
 Bump `BUNDLE_SERIES` in `ci/release_config.py` and update `RELEASE_NOTES` when
 changing patches. These changes ship with the next newer Waze build. To test
 them sooner, run the workflow with `force` and download its build artifacts.
