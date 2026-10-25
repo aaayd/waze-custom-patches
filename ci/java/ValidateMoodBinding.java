@@ -97,6 +97,16 @@ public class ValidateMoodBinding {
             invalid.set(7, new ImmutableInstruction35c(Opcode.INVOKE_VIRTUAL, call.getRegisterCount(), call.getRegisterC(), call.getRegisterD(),
                 call.getRegisterE(), call.getRegisterF(), call.getRegisterG(), new ImmutableMethodReference("Ljava/lang/String;", "startsWith", List.of("Ljava/lang/String;"), "Z")));
             rejected(copy(eligibility, eligibility.getName(), invalid), methods, "different eligibility predicate");
+            invalid = new ArrayList<>(code);
+            invalid.set(7, new ImmutableInstruction35c(Opcode.INVOKE_VIRTUAL, call.getRegisterCount(), call.getRegisterD(), call.getRegisterC(),
+                call.getRegisterE(), call.getRegisterF(), call.getRegisterG(), ((ReferenceInstruction) code.get(7)).getReference()));
+            rejected(copy(eligibility, eligibility.getName(), invalid), methods, "different predicate arguments");
+            invalid = new ArrayList<>(code);
+            int returnIndex = invalid.size() - 1;
+            if (invalid.get(returnIndex).getOpcode() != Opcode.RETURN) throw new AssertionError("Expected final return fixture");
+            int differentRegister = ((OneRegisterInstruction) invalid.get(returnIndex)).getRegisterA() == 0 ? 1 : 0;
+            invalid.set(returnIndex, new ImmutableInstruction11x(Opcode.RETURN, differentRegister));
+            rejected(copy(eligibility, eligibility.getName(), invalid), methods, "different returned predicate register");
             // Discovery remains stable after both early-return patches are present.
             var patched = new ArrayList<Instruction>(List.of(new ImmutableInstruction11n(Opcode.CONST_4, 0, 1), new ImmutableInstruction11x(Opcode.RETURN, 0)));
             patched.addAll(code);
