@@ -4,9 +4,13 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.*
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.AccessFlags
+import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
@@ -22,6 +26,59 @@ private fun hasMoodReturn(instructions: List<Instruction>, value: Int): Boolean 
     instructions.size >= 2 && instructions[0].isMoodConstant(0, value) &&
         instructions[1].opcode == Opcode.RETURN &&
         (instructions[1] as? OneRegisterInstruction)?.registerA == 0
+
+internal fun babyMoodGate(eligibility: Method, methods: Iterable<Method>): MethodReference {
+    val calls = eligibility.calls().filter {
+        it.definingClass == eligibility.definingClass && it.returnType == "Z" && it.parameterTypes.isEmpty()
+    }.distinct()
+    if (calls.isNotEmpty()) return calls.singleOrNull()
+        ?: throw PatchException("Expected one baby-mood eligibility call")
+
+    // Newer optimizers inline the baby getter into eligibility. Require the
+    // observed baby-only branch and an exact accessor of the same instance field.
+    val original = eligibility.code()
+    val code = if (hasMoodReturn(original, 1)) original.drop(2) else original
+    fun invalid(): Nothing = throw PatchException("Expected verified inlined baby-mood eligibility gate")
+    if (AccessFlags.STATIC.isSet(eligibility.accessFlags) || code.size < 11) invalid()
+    val load = code[0] as? TwoRegisterInstruction ?: invalid()
+    val field = (code[0] as? ReferenceInstruction)?.reference as? FieldReference ?: invalid()
+    val branch = code[1] as? OffsetInstruction ?: invalid()
+    if (code[0].opcode != Opcode.IGET_BOOLEAN || field.type != "Z" || field.definingClass != eligibility.definingClass ||
+        load.registerB != eligibility.implementation!!.registerCount - 3 || code[1].opcode != Opcode.IF_EQZ ||
+        (code[1] as? OneRegisterInstruction)?.registerA != load.registerA) invalid()
+    val body = code.subList(2, 10)
+    if (body.map { it.opcode } != listOf(Opcode.INVOKE_VIRTUAL, Opcode.MOVE_RESULT_OBJECT, Opcode.CONST,
+            Opcode.INVOKE_VIRTUAL, Opcode.MOVE_RESULT_OBJECT, Opcode.INVOKE_VIRTUAL, Opcode.MOVE_RESULT, Opcode.GOTO) ||
+        branch.codeOffset != code.subList(1, 10).sumOf { it.codeUnits }) invalid()
+    val references = body.mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }
+    if (references.map { it.toString() } != listOf(
+            "Landroid/content/Context;->getResources()Landroid/content/res/Resources;",
+            "Landroid/content/res/Resources;->getString(I)Ljava/lang/String;",
+            "Ljava/lang/String;->equals(Ljava/lang/Object;)Z")) invalid()
+    val resources = code[2] as FiveRegisterInstruction
+    val text = code[5] as FiveRegisterInstruction
+    val equals = code[7] as FiveRegisterInstruction
+    val count = eligibility.implementation!!.registerCount
+    if (resources.registerCount != 1 || resources.registerC != count - 2 ||
+        text.registerCount != 2 || text.registerC != (code[3] as OneRegisterInstruction).registerA ||
+        text.registerD != (code[4] as OneRegisterInstruction).registerA || equals.registerCount != 2 ||
+        equals.registerC != count - 1 || equals.registerD != (code[6] as OneRegisterInstruction).registerA) invalid()
+    val returnOffset = code.take(9).sumOf { it.codeUnits } + (code[9] as OffsetInstruction).codeOffset
+    var offset = 0
+    val returned = code.firstOrNull { instruction -> (offset == returnOffset).also { offset += instruction.codeUnits } }
+    if (returned?.opcode != Opcode.RETURN || (returned as? OneRegisterInstruction)?.registerA !=
+        (code[8] as OneRegisterInstruction).registerA) invalid()
+    return methods.filter { method ->
+        if (method.definingClass != eligibility.definingClass || method.returnType != "Z" ||
+            method.parameterTypes.isNotEmpty() || AccessFlags.STATIC.isSet(method.accessFlags)) return@filter false
+        val instructions = method.code().let { if (hasMoodReturn(it, 0)) it.drop(2) else it }
+        val read = instructions.firstOrNull() as? TwoRegisterInstruction
+        instructions.size == 2 && instructions[0].opcode == Opcode.IGET_BOOLEAN &&
+            (instructions[0] as? ReferenceInstruction)?.reference == field &&
+            read != null && read.registerB == method.implementation!!.registerCount - 1 && instructions[1].opcode == Opcode.RETURN &&
+            (instructions[1] as? OneRegisterInstruction)?.registerA == read.registerA
+    }.singleOrNull() ?: throw PatchException("Expected one accessor of the inlined baby-mood field")
+}
 
 @Suppress("unused")
 val driverIconsPatch = bytecodePatch(
@@ -41,8 +98,7 @@ val driverIconsPatch = bytecodePatch(
                 it.strings().containsAll(listOf("wazer_dino", "wazer_8bit", "wazer_robot"))
         }
         val manager = mutableClassDefBy(canSet.definingClass)
-        val babyRef = canSet.calls().singleOrNull { it.definingClass == manager.type && it.returnType == "Z" && it.parameterTypes.isEmpty() }
-            ?: throw PatchException("Expected one baby-mood eligibility call")
+        val babyRef = babyMoodGate(canSet, manager.methods)
         val baby = manager.methods.singleOrNull { it == babyRef }
             ?: throw PatchException("Expected Waze baby-mood gate")
         val refresh = manager.methods.singleOrNull { it.parameters() &&

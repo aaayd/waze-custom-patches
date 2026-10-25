@@ -219,6 +219,10 @@ def main():
     run(java, "-cp", os.pathsep.join([str(work), discovery_cp]), "ValidateDiscovery")
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/ValidateBundleOptions.java")
     run(java, "-cp", os.pathsep.join([str(work), str(desktop)]), "ValidateBundleOptions", bundle)
+    run(javac, "-cp", discovery_cp, "-d", work, ROOT / "ci/java/ValidateMoodBinding.java")
+    mood_cp = os.pathsep.join([str(work), discovery_cp])
+    for mood_source in [source] + [fixture_source for _, fixture_source, _, _ in fixture_inputs]:
+        run(java, "-Xmx2g", "-cp", mood_cp, "ValidateMoodBinding", mood_source)
     unsigned = work / "patched-unsigned.apk"
     report = output / "patch-report.json"
     run(java, "-Xmx4g", "-jar", desktop, "patch", "--unsigned", "--bytecode-mode", "STRIP_SAFE",
@@ -227,6 +231,7 @@ def main():
     if (result.get("failedPatches") or {x["name"] for x in result.get("appliedPatches", [])} != OPTIONS
             or not result.get("patchingSteps") or any(not x["success"] for x in result["patchingSteps"])):
         raise ValueError("All eight patches must succeed before publishing")
+    run(java, "-Xmx2g", "-cp", mood_cp, "ValidateMoodBinding", unsigned, "--patched")
     run(javac, "-cp", desktop, "-d", work, ROOT / "ci/java/ValidatePatchSelection.java")
     validation_cp = os.pathsep.join([str(work), str(desktop)])
     run(java, "-cp", validation_cp, "ValidatePatchSelection", unsigned, "true", "true", "true", "true", "true", metadata["version_code"])
@@ -260,6 +265,7 @@ def main():
         if not applied.get("patchingSteps") or any(not step["success"] for step in applied["patchingSteps"]):
             raise ValueError("Compatibility APK reconstruction failed")
         run(java, "-cp", validation_cp, "ValidatePatchSelection", fixture_apk, "true", "true", "true", "true", "true", fixture["version_code"])
+        run(java, "-Xmx2g", "-cp", mood_cp, "ValidateMoodBinding", fixture_apk, "--patched")
         if fixture_report:
             verify_patched_apk(fixture_apk, fixture_report)
             verified_versions.append(fixture["version"])
@@ -284,6 +290,7 @@ def main():
             if applied.get("failedPatches") or {x["name"] for x in applied.get("appliedPatches", [])} != OPTIONS:
                 raise ValueError("Renamed fixture did not apply all eight patches")
             run(java, "-cp", validation_cp, "ValidatePatchSelection", synthetic_apk, "true", "true", "true", "true", "true", 1030732)
+            run(java, "-Xmx2g", "-cp", mood_cp, "ValidateMoodBinding", synthetic_apk, "--patched")
         else:
             result = subprocess.run([str(x) for x in command + ["--exclusive", "-e", "Selectable map themes", synthetic]],
                                     text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

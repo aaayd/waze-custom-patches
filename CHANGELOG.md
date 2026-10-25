@@ -3,6 +3,7 @@
 ## Patch series 1.16
 
 - Fix native icon discovery on Waze 5.26.0.0 by validating complete report tables before resolving constructor ambiguity. Unrelated icon loaders no longer block releases; multiple valid tables and malformed tables still fail validation.
+- Handle the inlined baby-mood eligibility gate by verifying its field, branch, call arguments and unique getter; test malformed and ambiguous alternatives against real DEX.
 - Pin the failing Waze input as a future compatibility regression.
 - Run Python regression tests on Linux and Windows for pushes and pull requests, and preserve input provenance and compatibility diagnostics on release failures.
 
