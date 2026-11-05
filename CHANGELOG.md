@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.16.1030748](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.27.0.1-1030748-patches-1.16) (2026-11-05)
+
+Waze 5.27.0.1 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Resolve native constructor candidates by verified report-table geometry so repeated resource names in unrelated icon loaders do not block releases. Retain ambiguity and malformed-table rejection. Recognise the inlined baby-mood eligibility branch and its unique getter, with real-DEX negative and repeat-application tests. Add the Waze 5.26.0.0 regression fixture, cross-platform push/PR tests, and persistent failure diagnostics. Older inlined native icon sizing remains unsupported. Phone and Android Auto runtime testing is still required.
+
 ## [1.16.1030746](https://github.com/aaayd/waze-custom-patches/releases/tag/waze-5.26.90.901-1030746-patches-1.16) (2026-11-01)
 
 Waze 5.26.90.901 (ARM64). Eight independent options: selectable map themes; selectable report icon packs; detailed report icons at normal sizes; local rank badge selector; unlock driver moods; Android Auto setup; adjustable Android Auto police alert distance; speed camera sound below the speed limit. Resolve native constructor candidates by verified report-table geometry so repeated resource names in unrelated icon loaders do not block releases. Retain ambiguity and malformed-table rejection. Recognise the inlined baby-mood eligibility branch and its unique getter, with real-DEX negative and repeat-application tests. Add the Waze 5.26.0.0 regression fixture, cross-platform push/PR tests, and persistent failure diagnostics. Older inlined native icon sizing remains unsupported. Phone and Android Auto runtime testing is still required.
