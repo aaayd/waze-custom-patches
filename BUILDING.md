@@ -145,6 +145,14 @@ resource hook and must be rejected. Only these synthetic fixtures bypass the
 original certificate check. They are never published or installed. These tests
 cover routine obfuscation drift, not arbitrary changes in Waze's behaviour.
 
+Mood catalogue discovery follows the eligibility manager's superclass chain and
+validates either the original array-returning JNI pair or the newer protobuf
+pair. Small bridges enable hidden entries while preserving the caller's sorting
+flag, registers and native results, including calls that share a flag register.
+The real-DEX validator checks catalogue discovery and patched bridges alongside
+the eligibility gates, with negative, range-call and repeat-application cases.
+The pinned 5.28.5.0 fixture covers the inherited protobuf loader.
+
 ELF mapping checks follow the [Android linker loading rules](https://android.googlesource.com/platform/bionic/+/master/linker/linker_phdr.cpp).
 The old single-version profile and asset-generation script remain as a regression
 reference and are not used to discover new native offsets.
