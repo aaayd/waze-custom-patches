@@ -6,6 +6,15 @@ import app.morphe.patcher.patch.*
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.Method
+import com.android.tools.smali.dexlib2.iface.ClassDef
+import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
+import app.morphe.patcher.util.proxy.mutableTypes.MutableClass
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
+import com.android.tools.smali.dexlib2.immutable.instruction.*
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
@@ -26,6 +35,115 @@ private fun hasMoodReturn(instructions: List<Instruction>, value: Int): Boolean 
     instructions.size >= 2 && instructions[0].isMoodConstant(0, value) &&
         instructions[1].opcode == Opcode.RETURN &&
         (instructions[1] as? OneRegisterInstruction)?.registerA == 0
+
+private val catalogueNames = setOf("getDefaultMoodListNTV", "getCustomMoodListNTV",
+    "getDefaultMoodListProtosNTV", "getCustomMoodListProtosNTV")
+private fun catalogueName(ref: MethodReference) = ref.name.removePrefix("morphe_")
+
+/** Keep the caller's registers (including an aliased sorting flag) unchanged. */
+internal fun moodCatalogueBridge(native: Method): Method = ImmutableMethod(
+    native.definingClass, "morphe_${native.name}",
+    listOf(native.definingClass, "Z", "Z").map { ImmutableMethodParameter(it, emptySet(), null) },
+    native.returnType, AccessFlags.PUBLIC.value or AccessFlags.STATIC.value or AccessFlags.SYNTHETIC.value,
+    emptySet(), emptySet(), ImmutableMethodImplementation(3, listOf(
+        ImmutableInstruction11n(Opcode.CONST_4, 1, 1),
+        ImmutableInstruction35c(if (AccessFlags.PRIVATE.isSet(native.accessFlags)) Opcode.INVOKE_DIRECT else Opcode.INVOKE_VIRTUAL,
+            3, 0, 1, 2, 0, 0, native),
+        ImmutableInstruction11x(Opcode.MOVE_RESULT_OBJECT, 0),
+        ImmutableInstruction11x(Opcode.RETURN_OBJECT, 0)
+    ), emptyList(), emptyList())
+)
+
+private fun validCatalogueBridge(bridge: Method, native: Method): Boolean {
+    val expected = moodCatalogueBridge(native)
+    val code = bridge.code()
+    val call = code.getOrNull(1) as? FiveRegisterInstruction
+    return bridge == expected && bridge.accessFlags == expected.accessFlags &&
+        bridge.implementation?.registerCount == 3 && code.size == 4 &&
+        code.map { it.opcode } == expected.code().map { it.opcode } && code[0].isMoodConstant(1, 1) &&
+        call?.arguments() == listOf(0, 1, 2) && (code[1] as? ReferenceInstruction)?.reference == native &&
+        (code[2] as? OneRegisterInstruction)?.registerA == 0 && (code[3] as? OneRegisterInstruction)?.registerA == 0 &&
+        bridge.implementation!!.tryBlocks.isEmpty()
+}
+
+internal fun moodCatalogueCalls(manager: ClassDef, loader: Method): List<Pair<Int, Method>> {
+    val code = loader.code()
+    val calls = code.mapIndexedNotNull { index, instruction ->
+        val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+        if (ref == null || catalogueName(ref) !in catalogueNames) return@mapIndexedNotNull null
+        fun invalid(): Nothing = throw PatchException("Unexpected mood catalogue invocation: $ref")
+        if (ref.definingClass != manager.type) invalid()
+        val native = manager.methods.singleOrNull { it.name == catalogueName(ref) && it.parameters("Z", "Z") }
+            ?: invalid()
+        if (!AccessFlags.NATIVE.isSet(native.accessFlags) || AccessFlags.STATIC.isSet(native.accessFlags) ||
+            (if (native.name.contains("Protos")) native.returnType != "[B" else
+                !native.returnType.startsWith("[L") || !native.returnType.endsWith(";"))) invalid()
+        val bridged = ref.name.startsWith("morphe_")
+        val expectedOpcode = if (bridged) Opcode.INVOKE_STATIC else if (AccessFlags.PRIVATE.isSet(native.accessFlags))
+            Opcode.INVOKE_DIRECT else Opcode.INVOKE_VIRTUAL
+        val rangeOpcode = when (expectedOpcode) {
+            Opcode.INVOKE_STATIC -> Opcode.INVOKE_STATIC_RANGE
+            Opcode.INVOKE_DIRECT -> Opcode.INVOKE_DIRECT_RANGE
+            else -> Opcode.INVOKE_VIRTUAL_RANGE
+        }
+        if (instruction.opcode !in setOf(expectedOpcode, rangeOpcode) || instruction.arguments().size != 3 ||
+            instruction.arguments().any { it !in 0 until loader.implementation!!.registerCount } ||
+            code.getOrNull(index + 1)?.opcode != Opcode.MOVE_RESULT_OBJECT) invalid()
+        if (bridged) {
+            val bridge = manager.methods.singleOrNull { it == ref } ?: invalid()
+            if (!validCatalogueBridge(bridge, native)) invalid()
+        } else if (ref != native) invalid()
+        index to native
+    }
+    if (calls.size != 2 || calls.map { it.second.name }.toSet() !in setOf(
+            setOf("getDefaultMoodListNTV", "getCustomMoodListNTV"),
+            setOf("getDefaultMoodListProtosNTV", "getCustomMoodListProtosNTV")) ||
+        calls.map { it.second.returnType }.distinct().size != 1)
+        throw PatchException("Expected one matching pair of mood catalogue filters")
+    return calls
+}
+
+/** The protobuf loader lives in a superclass; never search unrelated classes. */
+internal fun moodCatalogueLoader(manager: ClassDef, classes: Iterable<ClassDef>): Method {
+    val types = classes.associateBy { it.type }
+    val hierarchy = mutableListOf<ClassDef>()
+    var current: ClassDef? = manager
+    while (current != null) {
+        if (hierarchy.any { it.type == current!!.type }) throw PatchException("Cyclic mood manager hierarchy")
+        hierarchy.add(current)
+        current = types[current.superclass]
+    }
+    val loader = hierarchy.flatMap { it.methods.toList() }.filter { method ->
+        method.parameters() && method.returnType == "V" && !AccessFlags.STATIC.isSet(method.accessFlags) &&
+            method.calls().any { catalogueName(it) in catalogueNames }
+    }.singleOrNull() ?: throw PatchException("Expected Waze mood catalogue loader")
+    moodCatalogueCalls(manager, loader)
+    return loader
+}
+
+internal fun patchMoodCatalogue(manager: MutableClass, refresh: MutableMethod) {
+    val calls = moodCatalogueCalls(manager, refresh)
+    // Validate collisions before mutating either the loader or the manager.
+    val bridges = calls.map { (_, native) ->
+        val expected = moodCatalogueBridge(native)
+        val existing = manager.methods.filter { it.name == expected.name }
+        if (existing.isNotEmpty() && (existing.size != 1 || !validCatalogueBridge(existing.single(), native)))
+            throw PatchException("Conflicting mood catalogue bridge: ${expected.name}")
+        expected
+    }
+    calls.zip(bridges).forEach { (call, bridge) ->
+        if (manager.methods.none { it == bridge }) manager.methods.add(MutableMethod(bridge))
+        val (index, _) = call
+        val instruction = refresh.code()[index]
+        val args = instruction.arguments()
+        val replacement = when (instruction) {
+            is FiveRegisterInstruction -> BuilderInstruction35c(Opcode.INVOKE_STATIC, 3, args[0], args[1], args[2], 0, 0, bridge)
+            is RegisterRangeInstruction -> BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, instruction.startRegister, 3, bridge)
+            else -> throw PatchException("Unknown mood invocation encoding")
+        }
+        refresh.replaceInstruction(index, replacement)
+    }
+}
 
 internal fun babyMoodGate(eligibility: Method, methods: Iterable<Method>): MethodReference {
     val calls = eligibility.calls().filter {
@@ -101,26 +219,10 @@ val driverIconsPatch = bytecodePatch(
         val babyRef = babyMoodGate(canSet, manager.methods)
         val baby = manager.methods.singleOrNull { it == babyRef }
             ?: throw PatchException("Expected Waze baby-mood gate")
-        val refresh = manager.methods.singleOrNull { it.parameters() &&
-            it.calls().map { ref -> ref.name }.containsAll(listOf("getDefaultMoodListNTV", "getCustomMoodListNTV")) }
-            ?: throw PatchException("Expected Waze mood catalogue loader")
-        val refreshInstructions = refresh.implementation!!.instructions.toList()
-        val catalogueCalls = refreshInstructions.mapIndexedNotNull { index, instruction ->
-            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
-            if (reference?.definingClass == manager.type && reference.name in setOf("getDefaultMoodListNTV", "getCustomMoodListNTV")) {
-                if (reference.parameterTypes.map(CharSequence::toString) != listOf("Z", "Z")) {
-                    throw PatchException("Unexpected mood catalogue invocation")
-                }
-                val register = when (instruction) {
-                    is FiveRegisterInstruction -> instruction.registerD
-                    is RegisterRangeInstruction -> instruction.startRegister + 1
-                    else -> throw PatchException("Unknown mood invocation encoding")
-                }
-                if (register > 255) throw PatchException("Mood filter register exceeds const encoding")
-                index to register
-            } else null
-        }
-        if (catalogueCalls.size != 2) throw PatchException("Expected two mood catalogue filters")
+        val classes = mutableListOf<ClassDef>()
+        classDefForEach { classes.add(it) }
+        val loader = moodCatalogueLoader(manager, classes)
+        val refresh = mutableClassDefBy(loader.definingClass).methods.single { it == loader }
 
         moodScreen()
         val create = moodGate()
@@ -132,10 +234,7 @@ val driverIconsPatch = bytecodePatch(
         if (!hasMoodReturn(baby.implementation!!.instructions.toList(), 0))
             baby.addInstructions(0, "const/4 v0, 0x0\nreturn v0")
         create.replaceInstruction(betaResult, "const/16 v$betaRegister, 0x1")
-        // Native first parameter includes special/hidden entries; the second controls sorting.
-        catalogueCalls.sortedByDescending { it.first }.forEach { (index, register) ->
-            if (index == 0 || !refreshInstructions[index - 1].isMoodConstant(register, 1))
-                refresh.addInstructions(index, "const/16 v$register, 0x1")
-        }
+        // Native first parameter includes special/hidden entries; preserve the sorting parameter.
+        patchMoodCatalogue(manager, refresh)
     }
 }

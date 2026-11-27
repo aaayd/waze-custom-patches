@@ -111,7 +111,14 @@ verifies the complete output hash before writing the renderer. Python, Capstone
 and ELF analysis run on the build host, not the phone.
 
 `ci/compatibility_fixtures.json` pins older original packages from several compiler
-and renderer generations. Their native profiles are generated before packaging
+and renderer generations. These packages are mirrored in the repository's
+`ci-compatibility-fixtures-v1` prerelease so historical APKMirror download failures
+cannot block regression builds. This fixture release is not an application update
+and is excluded from the Waze version gate and public Morphe source. Keep existing
+fixture assets unchanged; new fixtures must have a hosted URL and pinned SHA-256.
+Downloads use a temporary file, verify its hash before caching it, and retry
+transient transport errors up to three times. Package identity and original Waze
+signatures are still verified before patching. Their native profiles are generated before packaging
 the bundle. Full-support fixtures rebuild all eight patches without forcing
 compatibility. The January fixture separately requires seven successful patches
 and rejection of its unsupported inlined native layout. Only that diagnostic
@@ -144,6 +151,14 @@ the resulting hooks and runtime bindings. A second fixture adds a competing
 resource hook and must be rejected. Only these synthetic fixtures bypass the
 original certificate check. They are never published or installed. These tests
 cover routine obfuscation drift, not arbitrary changes in Waze's behaviour.
+
+Mood catalogue discovery follows the eligibility manager's superclass chain and
+validates either the original array-returning JNI pair or the newer protobuf
+pair. Small bridges enable hidden entries while preserving the caller's sorting
+flag, registers and native results, including calls that share a flag register.
+The real-DEX validator checks catalogue discovery and patched bridges alongside
+the eligibility gates, with negative, range-call and repeat-application cases.
+The pinned 5.28.5.0 fixture covers the inherited protobuf loader.
 
 ELF mapping checks follow the [Android linker loading rules](https://android.googlesource.com/platform/bionic/+/master/linker/linker_phdr.cpp).
 The old single-version profile and asset-generation script remain as a regression
